@@ -1,0 +1,14 @@
+fastapi
+numpy
+faiss-cpu
+tiktoken
+pydantic
+azure-identity
+azure-storage-blob
+openai
+python-dotenv
+uvicorn
+
+# Optional document loaders
+pypdf
+python-docx
