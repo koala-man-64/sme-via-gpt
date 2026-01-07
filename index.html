@@ -1,0 +1,624 @@
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Local RAG Chatbot</title>
+  <style>
+    :root {
+      --bg: #f7f5ef;
+      --panel: #ffffff;
+      --ink: #1a1a1a;
+      --muted: #5d5d5d;
+      --line: #1d1d1d;
+      --line-soft: #b8b8b8;
+      --accent: #0f766e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "JetBrains Mono", "IBM Plex Mono", "Fira Mono", "Source Code Pro", "Menlo", "Consolas", monospace;
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      background-image:
+        repeating-linear-gradient(0deg, transparent, transparent 23px, rgba(0, 0, 0, 0.04) 24px),
+        repeating-linear-gradient(90deg, transparent, transparent 23px, rgba(0, 0, 0, 0.04) 24px);
+    }
+    header {
+      padding: 16px 18px;
+      background: var(--panel);
+      border-bottom: 2px solid var(--line);
+      display:flex;
+      gap:12px;
+      align-items:center;
+      flex-wrap: wrap;
+    }
+    .spacer { flex: 1; }
+    header .actions { display:flex; gap:10px; align-items:center; }
+    header b {
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    header .pill {
+      font-size: 11px;
+      padding: 3px 8px;
+      border: 2px solid var(--line);
+      border-radius: 0;
+      color: var(--ink);
+      background: #f2f2f2;
+      min-width: 0;
+      flex: 1 1 420px;
+      white-space: normal;
+      line-height: 1.25;
+    }
+    #wrap { max-width: 980px; margin: 0 auto; padding: 16px; animation: rise 0.22s ease-out; }
+    #chat {
+      height: 70vh;
+      overflow: auto;
+      background: var(--panel);
+      border: 2px solid var(--line);
+      border-radius: 0;
+      padding: 12px;
+    }
+    .msg { margin: 12px 0; display: flex; }
+    .msg .bubble {
+      padding: 10px 12px;
+      border-radius: 0;
+      max-width: 78%;
+      white-space: pre-wrap;
+      line-height: 1.35;
+      border: 2px solid var(--line);
+    }
+    .user { justify-content: flex-end; }
+    .user .bubble { background: #efefef; border-style: solid; }
+    .assistant { justify-content: flex-start; }
+    .assistant .bubble { background: #ffffff; border-style: dashed; }
+    #bar { display:flex; gap: 10px; margin-top: 12px; }
+    #input {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 0;
+      border: 2px solid var(--line);
+      background: #ffffff;
+      color: var(--ink);
+      outline: none;
+    }
+    #input::placeholder { color: #7a7a7a; }
+    #input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px #d8f2ef; }
+    button {
+      padding: 10px 12px;
+      border-radius: 0;
+      border: 2px solid var(--line);
+      background: #ffffff;
+      color: var(--ink);
+      cursor:pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-size: 11px;
+    }
+    button:hover { background: #f5f5f5; }
+    .row { display:flex; gap: 10px; margin-top: 10px; align-items:center; }
+    .muted { color: var(--muted); font-size:12px; }
+    .panel {
+      margin-top: 12px;
+      border: 2px solid var(--line);
+      background: var(--panel);
+      padding: 10px;
+    }
+    .panel-header {
+      display:flex;
+      gap:10px;
+      align-items:center;
+      border-bottom: 2px solid var(--line);
+      padding-bottom: 8px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .panel-title {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .panel-actions { display:flex; gap: 8px; align-items:center; }
+    #authMask {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(247, 245, 239, 0.96);
+      z-index: 1000;
+    }
+    #authMask.active { display: flex; }
+    #authPanel {
+      width: min(420px, 92vw);
+      border: 2px solid var(--line);
+      background: var(--panel);
+      padding: 16px;
+    }
+    #authPanel .row { margin-top: 10px; }
+    #authInput {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 0;
+      border: 2px solid var(--line);
+      background: #ffffff;
+      color: var(--ink);
+      outline: none;
+    }
+    #authInput::placeholder { color: #7a7a7a; }
+    #authInput:focus { border-color: var(--accent); box-shadow: 0 0 0 2px #d8f2ef; }
+    #authError { margin-top: 8px; color: #8a1f1f; font-size: 12px; }
+    .doc-list {
+      display: grid;
+      gap: 6px;
+      max-height: 240px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .doc-list.collapsed { display: none; }
+    .doc-item {
+      display: grid;
+      grid-template-columns: 16px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      border: 2px dashed var(--line-soft);
+      padding: 6px 8px;
+    }
+    .doc-item input[type="checkbox"] { margin: 0; }
+    .doc-name { font-size: 12px; word-break: break-all; }
+    .doc-extra { display:flex; gap: 8px; align-items:center; }
+    .doc-meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
+    .doc-badge {
+      border: 2px solid var(--line);
+      padding: 2px 6px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .doc-badge.fresh { background: #e6f4f1; border-color: var(--accent); color: #0a4943; }
+    .doc-badge.stale { background: #fdf1d6; border-color: #d08b00; color: #6d4a00; }
+    .doc-badge.missing { background: #f5f5f5; border-color: var(--line-soft); color: var(--muted); }
+    .doc-empty { font-size: 12px; color: var(--muted); padding: 6px 4px; }
+    input[type="checkbox"] {
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--line);
+      background: #ffffff;
+    }
+    input[type="checkbox"]:checked {
+      background: var(--accent);
+      box-shadow: inset 0 0 0 2px #ffffff;
+    }
+    .thinking { display:flex; align-items:center; gap:8px; color: var(--muted); font-size:12px; }
+    .spinner {
+      width:12px;
+      height:12px;
+      border:2px solid var(--line);
+      border-top-color: var(--accent);
+      border-radius:0;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+  <div id="authMask">
+    <div id="authPanel">
+      <span class="panel-title">Unlock</span>
+      <div class="muted" id="authHint">Enter the password to use this app.</div>
+      <div class="row">
+        <input id="authInput" type="password" placeholder="Password" />
+        <button id="authBtn">Unlock</button>
+      </div>
+      <div id="authError"></div>
+    </div>
+  </div>
+  <header>
+    <b>Local RAG Chatbot</b>
+    <span class="pill" id="status">Index: unknown</span>
+    <span class="muted">OpenAI model + ADLS docs (RAG)</span>
+    <span class="spacer"></span>
+    <span class="muted" id="reindexOut"></span>
+    <div class="actions">
+      <button id="reindexBtn">Reindex ADLS</button>
+    </div>
+  </header>
+
+  <div id="wrap">
+    <div id="docsPanel" class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Documents</span>
+        <span class="muted" id="docsSummary"></span>
+        <span class="spacer"></span>
+        <div class="panel-actions">
+          <button id="toggleDocsBtn">Collapse</button>
+          <button id="selectAllBtn">Select All</button>
+          <button id="selectNoneBtn">Select None</button>
+        </div>
+      </div>
+      <div id="docsList" class="doc-list"></div>
+    </div>
+
+    <div id="chat"></div>
+
+    <div id="bar">
+      <input id="input" placeholder="Ask a question..." />
+      <button id="send">Send</button>
+    </div>
+  </div>
+
+<script>
+  const AUTH_REQUIRED = __AUTH_REQUIRED__;
+  let conversationId = null;
+  let docs = [];
+  let selectedDocs = new Set();
+  let docsCollapsed = false;
+  let appPassword = null;
+
+  function addMsg(role, text) {
+    const chat = document.getElementById('chat');
+    const div = document.createElement('div');
+    div.className = 'msg ' + (role === 'user' ? 'user' : 'assistant');
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+    div.appendChild(bubble);
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function setSources(sources) {
+    const el = document.getElementById('sources');
+    if (!el) return;
+    if (!sources || sources.length === 0) {
+      el.textContent = '';
+      return;
+    }
+    const lines = sources.map(s => `• ${s.blob_name} (chunk ${s.chunk_id}, score ${s.score.toFixed(3)})`);
+    el.textContent = "Sources:\\n" + lines.join("\\n");
+  }
+
+  function showAuthMask(message) {
+    const mask = document.getElementById('authMask');
+    if (!mask) return;
+    mask.classList.add('active');
+    const error = document.getElementById('authError');
+    if (error) {
+      error.textContent = message || '';
+    }
+    const input = document.getElementById('authInput');
+    if (input) input.focus();
+  }
+
+  function hideAuthMask() {
+    const mask = document.getElementById('authMask');
+    if (mask) mask.classList.remove('active');
+    const error = document.getElementById('authError');
+    if (error) error.textContent = '';
+  }
+
+  function ensureAuth() {
+    if (!AUTH_REQUIRED) return true;
+    if (appPassword) return true;
+    showAuthMask('Password required.');
+    return false;
+  }
+
+  async function fetchWithAuth(url, options = {}) {
+    const headers = Object.assign({}, options.headers || {});
+    if (appPassword) {
+      headers['X-App-Password'] = appPassword;
+    }
+    const r = await fetch(url, { ...options, headers });
+    if (r.status === 401) {
+      appPassword = null;
+      showAuthMask('Password required.');
+      throw new Error('Unauthorized');
+    }
+    return r;
+  }
+
+  async function attemptAuth() {
+    const input = document.getElementById('authInput');
+    const btn = document.getElementById('authBtn');
+    const password = input ? input.value.trim() : '';
+    if (!password) {
+      showAuthMask('Enter a password to continue.');
+      return;
+    }
+    if (btn) btn.disabled = true;
+    try {
+      const r = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      if (!r.ok) {
+        showAuthMask('Incorrect password.');
+        return;
+      }
+      appPassword = password;
+      if (input) input.value = '';
+      hideAuthMask();
+      await refreshStatus();
+      await loadDocs();
+    } catch (err) {
+      showAuthMask('Unable to authenticate.');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function formatBytes(value) {
+    if (!value && value !== 0) return '';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let size = Number(value);
+    let i = 0;
+    while (size >= 1024 && i < units.length - 1) {
+      size /= 1024;
+      i += 1;
+    }
+    return `${size.toFixed(size >= 10 || i === 0 ? 0 : 1)}${units[i]}`;
+  }
+
+  function updateDocsSummary() {
+    const el = document.getElementById('docsSummary');
+    if (!el) return;
+    el.textContent = `${selectedDocs.size} selected / ${docs.length} docs`;
+  }
+
+  function updateDocsCollapseState() {
+    const list = document.getElementById('docsList');
+    const btn = document.getElementById('toggleDocsBtn');
+    if (!list || !btn) return;
+    if (docsCollapsed) {
+      list.classList.add('collapsed');
+      btn.textContent = 'Expand';
+    } else {
+      list.classList.remove('collapsed');
+      btn.textContent = 'Collapse';
+    }
+  }
+
+  function renderDocs() {
+    const list = document.getElementById('docsList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (!docs.length) {
+      const empty = document.createElement('div');
+      empty.className = 'doc-empty';
+      empty.textContent = 'No supported documents found.';
+      list.appendChild(empty);
+      updateDocsSummary();
+      return;
+    }
+
+    docs.forEach((doc) => {
+      const row = document.createElement('label');
+      row.className = 'doc-item';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = selectedDocs.has(doc.name);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+          selectedDocs.add(doc.name);
+        } else {
+          selectedDocs.delete(doc.name);
+        }
+        updateDocsSummary();
+      });
+
+      const name = document.createElement('span');
+      name.className = 'doc-name';
+      name.textContent = doc.name;
+
+      const extra = document.createElement('div');
+      extra.className = 'doc-extra';
+
+      const badge = document.createElement('span');
+      badge.className = `doc-badge ${doc.cache_status || 'missing'}`;
+      badge.textContent = doc.cache_status || 'missing';
+
+      const meta = document.createElement('span');
+      meta.className = 'doc-meta';
+      const metaParts = [];
+      if (doc.last_modified) metaParts.push(doc.last_modified);
+      const size = formatBytes(doc.size);
+      if (size) metaParts.push(size);
+      meta.textContent = metaParts.join(' | ');
+
+      extra.appendChild(badge);
+      if (meta.textContent) {
+        extra.appendChild(meta);
+      }
+
+      row.appendChild(checkbox);
+      row.appendChild(name);
+      row.appendChild(extra);
+      list.appendChild(row);
+    });
+
+    updateDocsSummary();
+    updateDocsCollapseState();
+  }
+
+  async function loadDocs() {
+    if (!ensureAuth()) return;
+    const list = document.getElementById('docsList');
+    if (list) {
+      list.innerHTML = '';
+    }
+    try {
+      const r = await fetchWithAuth('/api/docs');
+      const j = await r.json();
+      docs = j.docs || [];
+      selectedDocs = new Set(j.selected || docs.filter(d => d.selected).map(d => d.name));
+      renderDocs();
+    } catch (err) {
+      docs = [];
+      selectedDocs = new Set();
+      renderDocs();
+    }
+  }
+
+  function setAllDocs(selected) {
+    if (selected) {
+      selectedDocs = new Set(docs.map(d => d.name));
+    } else {
+      selectedDocs = new Set();
+    }
+    renderDocs();
+  }
+
+  function formatNumber(value) {
+    if (value === null || value === undefined) return '0';
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value.toLocaleString() : '0';
+    }
+    return String(value);
+  }
+
+  function formatAverage(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return '0';
+    if (value % 1 === 0) return value.toLocaleString();
+    return value.toFixed(2);
+  }
+
+  async function refreshStatus() {
+    if (!ensureAuth()) return;
+    const r = await fetchWithAuth('/api/status');
+    const j = await r.json();
+    const parts = [];
+    parts.push(j.ready ? 'Index: ready' : 'Index: not built');
+    parts.push(`blobs ${formatNumber(j.blobs)}`);
+    parts.push(`chunks ${formatNumber(j.chunks)}`);
+    parts.push(`tokens ${formatNumber(j.tokens)}`);
+    parts.push(`avg/chunk ${formatAverage(j.avg_tokens_per_chunk)}`);
+    parts.push(`chars ${formatNumber(j.total_chars)}`);
+    parts.push(`dim ${j.dim ?? '-'}`);
+    parts.push(`model ${j.model || '-'}`);
+    parts.push(`embed ${j.embed_model || '-'}`);
+    if (j.last_modified_max) {
+      parts.push(`latest ${j.last_modified_max}`);
+    }
+    document.getElementById('status').textContent = parts.join(' | ');
+  }
+
+  function addThinking() {
+    removeThinking();
+    const chat = document.getElementById('chat');
+    const div = document.createElement('div');
+    div.className = 'msg assistant';
+    div.id = 'thinkingMsg';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble thinking';
+    const spin = document.createElement('span');
+    spin.className = 'spinner';
+    const text = document.createElement('span');
+    text.textContent = 'Thinking...';
+    bubble.appendChild(spin);
+    bubble.appendChild(text);
+    div.appendChild(bubble);
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function removeThinking() {
+    const existing = document.getElementById('thinkingMsg');
+    if (existing) existing.remove();
+  }
+
+  async function send() {
+    const inp = document.getElementById('input');
+    const text = inp.value.trim();
+    if (!text) return;
+    if (!ensureAuth()) return;
+    inp.value = '';
+    addMsg('user', text);
+    setSources([]);
+    addThinking();
+
+    try {
+      const r = await fetchWithAuth('/api/chat', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ message: text, conversation_id: conversationId })
+      });
+      const j = await r.json();
+      conversationId = j.conversation_id;
+      removeThinking();
+      addMsg('assistant', j.answer);
+      setSources(j.sources || []);
+    } catch (err) {
+      removeThinking();
+      addMsg('assistant', 'Sorry, something went wrong while contacting the server.');
+    } finally {
+      removeThinking();
+    }
+  }
+
+  document.getElementById('send').addEventListener('click', send);
+  document.getElementById('input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') send();
+  });
+
+  document.getElementById('authBtn').addEventListener('click', attemptAuth);
+  document.getElementById('authInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') attemptAuth();
+  });
+
+  document.getElementById('toggleDocsBtn').addEventListener('click', () => {
+    docsCollapsed = !docsCollapsed;
+    updateDocsCollapseState();
+  });
+
+  document.getElementById('selectAllBtn').addEventListener('click', () => {
+    setAllDocs(true);
+  });
+
+  document.getElementById('selectNoneBtn').addEventListener('click', () => {
+    setAllDocs(false);
+  });
+
+  document.getElementById('reindexBtn').addEventListener('click', async () => {
+    if (!ensureAuth()) return;
+    const btn = document.getElementById('reindexBtn');
+    btn.disabled = true;
+    document.getElementById('reindexOut').textContent = 'Running...';
+    try {
+      const payload = { selected_blobs: Array.from(selectedDocs) };
+      const r = await fetchWithAuth('/api/reindex', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json();
+      const out = j.ok
+        ? `Indexed ${j.indexed_files} files (cached ${j.cached_files}, embedded ${j.embedded_files}, chunks ${j.chunks}) in ${j.seconds}s`
+        : JSON.stringify(j);
+      document.getElementById('reindexOut').textContent = out;
+      await refreshStatus();
+      await loadDocs();
+    } catch (err) {
+      document.getElementById('reindexOut').textContent = 'Reindex failed.';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  if (AUTH_REQUIRED) {
+    showAuthMask('');
+  } else {
+    refreshStatus();
+    loadDocs();
+  }
+</script>
+</body>
+</html>

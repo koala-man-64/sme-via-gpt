@@ -1,0 +1,60 @@
+name: Deploy to Azure Container Apps
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-aca
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      RG: ${{ vars.AZURE_RG }}
+      LOCATION: ${{ vars.AZURE_LOCATION || 'eastus2' }}
+      APP_NAME: ${{ vars.AZURE_APP_NAME }}
+      ENV_NAME: ${{ vars.AZURE_CA_ENV_NAME }}
+      ACR_NAME: ${{ vars.AZURE_ACR_NAME }}
+      AZURE_STORAGE_PREFIX: ${{ vars.AZURE_STORAGE_PREFIX || '' }}
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (service principal JSON)
+        if: ${{ secrets.AZURE_CREDENTIALS != '' }}
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Azure login (OIDC)
+        if: ${{ secrets.AZURE_CREDENTIALS == '' }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure Azure CLI extensions
+        run: az extension add --name containerapp --upgrade
+
+      - name: Deploy (create resources if missing)
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+          AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+        run: |
+          chmod +x deploy/aca_deploy.sh
+          bash deploy/aca_deploy.sh
+
+      - name: Smoke check
+        run: |
+          FQDN="$(az containerapp show -n "$APP_NAME" -g "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
+          curl -fsS "https://${FQDN}/healthz"
+          curl -fsS "https://${FQDN}/readyz"
