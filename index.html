@@ -1,6 +1,6 @@
-
 <!doctype html>
 <html>
+
 <head>
   <meta charset="utf-8" />
   <title>Local RAG Chatbot</title>
@@ -13,8 +13,15 @@
       --line: #1d1d1d;
       --line-soft: #b8b8b8;
       --accent: #0f766e;
+
+      --gap-layout: 16px;
+      --spacing-panel: 12px;
     }
-    * { box-sizing: border-box; }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       font-family: "JetBrains Mono", "IBM Plex Mono", "Fira Mono", "Source Code Pro", "Menlo", "Consolas", monospace;
       margin: 0;
@@ -23,602 +30,1172 @@
       background-image:
         repeating-linear-gradient(0deg, transparent, transparent 23px, rgba(0, 0, 0, 0.04) 24px),
         repeating-linear-gradient(90deg, transparent, transparent 23px, rgba(0, 0, 0, 0.04) 24px);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
+
     header {
-      padding: 16px 18px;
+      padding: var(--spacing-panel) var(--gap-layout);
       background: var(--panel);
       border-bottom: 2px solid var(--line);
-      display:flex;
-      gap:12px;
-      align-items:center;
-      flex-wrap: wrap;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
     }
-    .spacer { flex: 1; }
-    header .actions { display:flex; gap:10px; align-items:center; }
+
     header b {
-      font-size: 12px;
+      font-size: 14px;
       letter-spacing: 0.12em;
       text-transform: uppercase;
     }
-    header .pill {
-      font-size: 11px;
-      padding: 3px 8px;
-      border: 2px solid var(--line);
-      border-radius: 0;
-      color: var(--ink);
-      background: #f2f2f2;
-      min-width: 0;
-      flex: 1 1 420px;
-      white-space: normal;
-      line-height: 1.25;
-    }
-    #wrap { max-width: 980px; margin: 0 auto; padding: 16px; animation: rise 0.22s ease-out; }
-    #chat {
-      height: 70vh;
-      overflow: auto;
-      background: var(--panel);
-      border: 2px solid var(--line);
-      border-radius: 0;
-      padding: 12px;
-    }
-    .msg { margin: 12px 0; display: flex; }
-    .msg .bubble {
-      padding: 10px 12px;
-      border-radius: 0;
-      max-width: 78%;
-      white-space: pre-wrap;
-      line-height: 1.35;
-      border: 2px solid var(--line);
-    }
-    .user { justify-content: flex-end; }
-    .user .bubble { background: #efefef; border-style: solid; }
-    .assistant { justify-content: flex-start; }
-    .assistant .bubble { background: #ffffff; border-style: dashed; }
-    #bar { display:flex; gap: 10px; margin-top: 12px; }
-    #input {
+
+    #app-grid {
       flex: 1;
-      padding: 10px 12px;
-      border-radius: 0;
-      border: 2px solid var(--line);
-      background: #ffffff;
-      color: var(--ink);
-      outline: none;
+      display: grid;
+      grid-template-columns: 280px 1fr 300px;
+      gap: var(--gap-layout);
+      padding: var(--gap-layout);
+      min-height: 0;
+      /* allows grid children to scroll */
+      max-width: 1800px;
+      margin: 0 auto;
+      width: 100%;
     }
-    #input::placeholder { color: #7a7a7a; }
-    #input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px #d8f2ef; }
-    button {
-      padding: 10px 12px;
-      border-radius: 0;
-      border: 2px solid var(--line);
-      background: #ffffff;
-      color: var(--ink);
-      cursor:pointer;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      font-size: 11px;
+
+    .col {
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap-layout);
+      min-height: 0;
     }
-    button:hover { background: #f5f5f5; }
-    .row { display:flex; gap: 10px; margin-top: 10px; align-items:center; }
-    .muted { color: var(--muted); font-size:12px; }
+
+    .col-center {
+      min-width: 0;
+    }
+
     .panel {
-      margin-top: 12px;
-      border: 2px solid var(--line);
       background: var(--panel);
-      padding: 10px;
+      border: 2px solid var(--line);
+      display: flex;
+      flex-direction: column;
     }
+
     .panel-header {
-      display:flex;
-      gap:10px;
-      align-items:center;
+      padding: var(--spacing-panel);
       border-bottom: 2px solid var(--line);
-      padding-bottom: 8px;
-      margin-bottom: 8px;
-      flex-wrap: wrap;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
     }
+
     .panel-title {
       font-size: 11px;
-      letter-spacing: 0.12em;
+      font-weight: bold;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
     }
-    .panel-actions { display:flex; gap: 8px; align-items:center; }
+
+    .panel-body {
+      padding: var(--spacing-panel);
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      padding: 4px 0;
+      border-bottom: 1px dashed var(--line-soft);
+    }
+
+    .stat-row:last-child {
+      border-bottom: none;
+    }
+
+    .stat-label {
+      color: var(--muted);
+    }
+
+    .stat-val {
+      font-weight: bold;
+      text-align: right;
+    }
+
+    #chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      border: 2px solid var(--line);
+      background: var(--panel);
+      min-height: 0;
+    }
+
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--spacing-panel);
+    }
+
+    .msg {
+      margin: 12px 0;
+      display: flex;
+    }
+
+    .msg .bubble {
+      padding: 10px 12px;
+      max-width: 85%;
+      white-space: pre-wrap;
+      line-height: 1.4;
+      border: 2px solid var(--line);
+      font-size: 13px;
+    }
+
+    .user {
+      justify-content: flex-end;
+    }
+
+    .user .bubble {
+      background: #efefef;
+    }
+
+    .assistant {
+      justify-content: flex-start;
+    }
+
+    .assistant .bubble {
+      background: #ffffff;
+      border-style: dashed;
+    }
+
+    #input-area {
+      padding: var(--spacing-panel);
+      border-top: 2px solid var(--line);
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #bar {
+      display: flex;
+      gap: 8px;
+    }
+
+    #input {
+      flex: 1;
+      padding: 10px;
+      border: 2px solid var(--line);
+      outline: none;
+      font-family: inherit;
+    }
+
+    #input:focus {
+      border-color: var(--accent);
+    }
+
+    button {
+      padding: 8px 12px;
+      border: 2px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #f2f2f2;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .doc-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .doc-item {
+      display: grid;
+      grid-template-columns: 20px 1fr;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line-soft);
+      padding: 6px;
+      background: #fafafa;
+    }
+
+    .doc-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      overflow: hidden;
+    }
+
+    .doc-name {
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: bold;
+    }
+
+    .doc-meta {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
     #authMask {
       position: fixed;
       inset: 0;
       display: none;
       align-items: center;
       justify-content: center;
-      padding: 24px;
-      background: rgba(247, 245, 239, 0.96);
-      z-index: 1000;
+      background: rgba(247, 245, 239, 0.95);
+      z-index: 999;
     }
-    #authMask.active { display: flex; }
+
+    #authMask.active {
+      display: flex;
+    }
+
     #authPanel {
-      width: min(420px, 92vw);
+      padding: 20px;
+      background: #fff;
       border: 2px solid var(--line);
-      background: var(--panel);
-      padding: 16px;
+      width: 300px;
     }
-    #authPanel .row { margin-top: 10px; }
-    #authInput {
-      flex: 1;
-      padding: 10px 12px;
-      border-radius: 0;
-      border: 2px solid var(--line);
-      background: #ffffff;
+
+    @media (max-width: 900px) {
+      header {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-bottom: 8px;
+        /* Extra space for nav */
+      }
+
+      #mobile-nav {
+        display: flex !important;
+        width: 100%;
+        padding-top: 8px;
+        border-top: 1px dashed var(--line-soft);
+        justify-content: space-around;
+        order: 99;
+        /* Force to bottom of header */
+      }
+
+      #app-grid {
+        display: block;
+        height: calc(100vh - 90px);
+        /* Approx header height */
+        overflow: hidden;
+        padding: 0;
+        /* Remove padding on mobile for full width */
+      }
+
+      .col,
+      .col-center {
+        width: 100%;
+        height: 100%;
+        display: none;
+        /* Managed by JS */
+      }
+
+      /* Reset specific overrides */
+      #chat-container {
+        height: 100%;
+        border-left: none;
+        border-right: none;
+        border-bottom: none;
+      }
+
+      .panel {
+        height: 100%;
+      }
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .animated-dots::after {
+      content: '.';
+      animation: dots 2s steps(4, end) infinite;
+    }
+
+    @keyframes dots {
+
+      0%,
+      20% {
+        content: '';
+      }
+
+      40% {
+        content: '.';
+      }
+
+      60% {
+        content: '..';
+      }
+
+      80%,
+      100% {
+        content: '...';
+      }
+    }
+
+    .hist-item {
+      font-size: 11px;
+      padding: 6px;
+      border-bottom: 1px solid var(--line-soft);
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--muted);
+    }
+
+    .hist-item:hover {
+      background: #f2f2f2;
       color: var(--ink);
-      outline: none;
     }
-    #authInput::placeholder { color: #7a7a7a; }
-    #authInput:focus { border-color: var(--accent); box-shadow: 0 0 0 2px #d8f2ef; }
-    #authError { margin-top: 8px; color: #8a1f1f; font-size: 12px; }
-    .doc-list {
-      display: grid;
-      gap: 6px;
-      max-height: 240px;
-      overflow: auto;
-      padding-right: 4px;
+
+    .hist-item b {
+      color: var(--ink);
+      margin-right: 4px;
     }
-    .doc-list.collapsed { display: none; }
-    .doc-item {
-      display: grid;
-      grid-template-columns: 16px 1fr auto;
-      gap: 8px;
-      align-items: center;
-      border: 2px dashed var(--line-soft);
-      padding: 6px 8px;
+
+    /* Tooltip (HTML based) */
+    .has-tooltip {
+      position: relative;
     }
-    .doc-item input[type="checkbox"] { margin: 0; }
-    .doc-name { font-size: 12px; word-break: break-all; }
-    .doc-extra { display:flex; gap: 8px; align-items:center; }
-    .doc-meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
-    .doc-badge {
-      border: 2px solid var(--line);
-      padding: 2px 6px;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
+
+    .tooltip-popup {
+      display: none;
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1a1a1a;
+      color: #fff;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      width: 220px;
+      z-index: 1000;
+      margin-bottom: 8px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      line-height: 1.4;
+      font-weight: normal;
+      /* reset from bold label */
+      cursor: auto;
     }
-    .doc-badge.fresh { background: #e6f4f1; border-color: var(--accent); color: #0a4943; }
-    .doc-badge.stale { background: #fdf1d6; border-color: #d08b00; color: #6d4a00; }
-    .doc-badge.missing { background: #f5f5f5; border-color: var(--line-soft); color: var(--muted); }
-    .doc-empty { font-size: 12px; color: var(--muted); padding: 6px 4px; }
-    input[type="checkbox"] {
-      appearance: none;
-      width: 14px;
-      height: 14px;
-      border: 2px solid var(--line);
-      background: #ffffff;
+
+    .has-tooltip:hover .tooltip-popup {
+      display: block;
     }
-    input[type="checkbox"]:checked {
-      background: var(--accent);
-      box-shadow: inset 0 0 0 2px #ffffff;
+
+    /* arrow */
+    .tooltip-popup::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      margin-left: -5px;
+      border-width: 5px;
+      border-style: solid;
+      border-color: #1a1a1a transparent transparent transparent;
     }
-    .thinking { display:flex; align-items:center; gap:8px; color: var(--muted); font-size:12px; }
-    .spinner {
-      width:12px;
-      height:12px;
-      border:2px solid var(--line);
-      border-top-color: var(--accent);
-      border-radius:0;
-      animation: spin 0.8s linear infinite;
+
+    /* Right-sided tooltip for sidebar */
+    .tooltip-right {
+      bottom: auto !important;
+      left: 100% !important;
+      top: 50% !important;
+      transform: translateY(-50%) !important;
+      margin-left: 10px !important;
+      margin-bottom: 0 !important;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    .tooltip-right::after {
+      top: 50% !important;
+      left: auto !important;
+      right: 100% !important;
+      margin-left: 0 !important;
+      margin-top: -5px !important;
+      border-color: transparent #1a1a1a transparent transparent !important;
+    }
+
+    /* Markdown Compact Styles */
+    .bubble p {
+      margin: 6px 0;
+    }
+
+    .bubble p:first-child {
+      margin-top: 0;
+    }
+
+    .bubble p:last-child {
+      margin-bottom: 0;
+    }
+
+    .bubble ul,
+    .bubble ol {
+      margin: 6px 0;
+      padding-left: 20px;
+    }
+
+    .bubble li {
+      margin: 2px 0;
+    }
+
+    .bubble pre {
+      background: #f1f1f1;
+      padding: 8px;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 8px 0;
+    }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
+
 <body>
   <div id="authMask">
     <div id="authPanel">
-      <span class="panel-title">Unlock</span>
-      <div class="muted" id="authHint">Enter the password to use this app.</div>
-      <div class="row">
+      <div class="panel-title" style="margin-bottom:12px">Unlock</div>
+      <div class="row" style="display:flex; gap:8px;">
         <input id="authInput" type="password" placeholder="Password" />
-        <button id="authBtn">Unlock</button>
+        <button id="authBtn">Go</button>
       </div>
       <div id="authError"></div>
     </div>
   </div>
+
   <header>
     <b>Local RAG Chatbot</b>
-    <span class="pill" id="status">Index: unknown</span>
-    <span class="muted">OpenAI model + ADLS docs (RAG)</span>
-    <span class="spacer"></span>
-    <span class="muted" id="reindexOut"></span>
-    <div class="actions">
-      <button id="reindexBtn">Reindex ADLS</button>
+
+    <div id="mobile-nav" style="display:none; gap:12px; font-size:11px; font-weight:bold; text-transform:uppercase;">
+      <span id="nav-model" onclick="setMobileTab('model')" style="cursor:pointer; opacity:0.5">Model</span>
+      <span id="nav-chat" onclick="setMobileTab('chat')" style="cursor:pointer; text-decoration:underline">Chat</span>
+      <span id="nav-docs" onclick="setMobileTab('docs')" style="cursor:pointer; opacity:0.5">Docs</span>
     </div>
   </header>
 
-  <div id="wrap">
-    <div id="docsPanel" class="panel">
-      <div class="panel-header">
-        <span class="panel-title">Documents</span>
-        <span class="muted" id="docsSummary"></span>
-        <span class="spacer"></span>
-        <div class="panel-actions">
-          <button id="toggleDocsBtn">Collapse</button>
-          <button id="selectAllBtn">Select All</button>
-          <button id="selectNoneBtn">Select None</button>
+  <div id="app-grid">
+    <!-- LEFT PANEL: Stats -->
+    <aside class="col" id="panel-left">
+      <div class="panel" style="flex:0 0 auto">
+        <div class="panel-header"><span class="panel-title">Model</span></div>
+        <div class="panel-body">
+          <select id="modelSelect"
+            style="width:100%; font-size:12px; padding:6px; border:1px solid var(--line-soft); border-radius:4px; background:#fff; outline:none; margin-bottom:8px;">
+            <option value="" disabled selected>Loading...</option>
+          </select>
+          <div id="modelDesc" style="font-size:11px; color:#555; margin-bottom:8px; line-height:1.4;"></div>
+          <div id="modelPrices"
+            style="font-size:11px; color:var(--muted); background:var(--bg-warm); padding:6px; border-radius:4px;">
+          </div>
         </div>
       </div>
-      <div id="docsList" class="doc-list"></div>
-    </div>
 
-    <div id="chat"></div>
+      <div class="panel" style="flex:1">
+        <div class="panel-header"><span class="panel-title">Context Window</span></div>
+        <div class="panel-body" style="overflow:visible; display:flex; flex-direction:column;">
+          <div class="stat-row" style="flex-wrap:wrap;">
+            <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+              <span class="stat-label has-tooltip" style="cursor:help">Total Tokens
+                <div class="tooltip-popup tooltip-right">Total tokens sent to the API (Input). Progress shows saturation
+                  of context window.</div>
+              </span>
+              <span class="stat-val" id="usageTokens">-</span>
+            </div>
+            <!-- Progress Bar -->
+            <div
+              style="width:100%; height:4px; background:#e0e0e0; margin-top:4px; border-radius:2px; overflow:hidden;">
+              <div id="usageBar"
+                style="width:0%; height:100%; background:var(--accent); transition: width 0.3s, background 0.3s;"></div>
+            </div>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label has-tooltip" style="cursor:help">Avg Cached
+              <div class="tooltip-popup tooltip-right">Average number of RAG chunks (or equiv. text) hitting the Prompt
+                Cache per
+                message turn.</div>
+            </span>
+            <span class="stat-val" id="usageCacheAvg">-</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label has-tooltip" style="cursor:help">Output
+              <div class="tooltip-popup tooltip-right">Tokens generated by the model (Assistant response).</div>
+            </span>
+            <span class="stat-val" id="usageOutput">-</span>
+          </div>
+          <!-- Granular Breakdown -->
+          <div class="stat-row">
+            <span class="stat-label has-tooltip" style="cursor:help">User Msg
+              <div class="tooltip-popup tooltip-right">Tokens consumed by your latest question.</div>
+            </span>
+            <span class="stat-val" id="usageQuery">-</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label has-tooltip" style="cursor:help">Context
+              <div class="tooltip-popup tooltip-right">Tokens used by retrieved documents or full context text.</div>
+            </span>
+            <span class="stat-val" id="usageContext">-</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label has-tooltip" style="cursor:help">History
+              <div class="tooltip-popup tooltip-right">Tokens consumed by previous conversation turns (User + Bot).
+              </div>
+            </span>
+            <span class="stat-val" id="usageHistory">-</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label has-tooltip" style="cursor:help">System
+              <div class="tooltip-popup tooltip-right">Tokens used by the static system instructions.</div>
+            </span>
+            <span class="stat-val" id="usageSystem">-</span>
+          </div>
 
-    <div id="bar">
-      <input id="input" placeholder="Ask a question..." />
-      <button id="send">Send</button>
-    </div>
+          <div
+            style="margin-top:12px; margin-bottom:4px; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em;">
+            History</div>
+          <div id="historyList"
+            style="border:1px solid var(--line-soft); flex:1; overflow-y:auto; min-height:100px; background:#fff;">
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER PANEL: Chat -->
+    <main class="col col-center" id="panel-center">
+      <div id="chat-container">
+        <div id="chat"></div>
+        <div id="input-area">
+          <div id="bar">
+            <input id="input" placeholder="Type your question..." autocomplete="off" />
+            <button id="send">SEND</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- RIGHT PANEL: Docs -->
+    <aside class="col" id="panel-right">
+      <div class="panel" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+        <div class="panel-header">
+          <span class="panel-title">Knowledge Base</span>
+        </div>
+
+        <!-- MODE SELECTOR -->
+        <div style="padding:var(--spacing-panel); border-bottom:2px solid var(--line);">
+          <div
+            style="font-size:10px; font-weight:bold; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted);">
+            Chat Mode</div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <label class="has-tooltip"
+              style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; width:fit-content;">
+              <input type="radio" name="chatMode" value="direct">
+              <b>Direct</b> <span class="muted" style="margin-left:auto; font-size:10px;">(Full Context)</span>
+              <div class="tooltip-popup">Injects FULL context of ALL selected files.<br />Best for comprehensive answers
+                using entire documents.</div>
+            </label>
+            <label class="has-tooltip"
+              style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; width:fit-content;">
+              <input type="radio" name="chatMode" value="cache">
+              <b>Cache</b> <span class="muted" style="margin-left:auto; font-size:10px;">(Optimized Prefix)</span>
+              <div class="tooltip-popup">Pins ALL files to the top of the prompt (System -> Context ->
+                History).<br />Max cache hits; best for multiple questions on stable docs.</div>
+            </label>
+            <label class="has-tooltip"
+              style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; width:fit-content;">
+              <input type="radio" name="chatMode" value="rag" checked>
+              <b>RAG</b> <span class="muted" style="margin-left:auto; font-size:10px;">(Retrieval)</span>
+              <div class="tooltip-popup">Retrieves only relevant chunks based on your question.<br />Best for large
+                knowledge bases exceeding context limits.</div>
+            </label>
+          </div>
+        </div>
+
+        <div
+          style="padding:calc(var(--spacing-panel) - 2px) var(--spacing-panel); border-bottom:2px solid var(--line); background:#fafafa; display:flex; gap:6px; flex-wrap:wrap;">
+          <button id="selectAllBtn" style="flex:1;">All</button>
+          <button id="selectNoneBtn" style="flex:1;">None</button>
+          <button id="reindexBtn" style="flex:1;">Reindex</button>
+        </div>
+        <div style="padding:4px var(--spacing-panel);">
+          <div id="reindexOut" style="font-size:10px; color:var(--accent);"></div>
+          <div class="muted" id="docsSummary" style="font-size:10px; margin-top:4px;"></div>
+        </div>
+        <div class="panel-body" id="docsList" style="padding:var(--spacing-panel);"></div>
+      </div>
+    </aside>
   </div>
 
-<script>
-  const AUTH_REQUIRED = __AUTH_REQUIRED__;
-  let conversationId = null;
-  let docs = [];
-  let selectedDocs = new Set();
-  let docsCollapsed = false;
-  let appPassword = null;
+  <script>
+    const AUTH_REQUIRED = __AUTH_REQUIRED__;
+    let conversationId = null;
+    let docs = [];
+    let selectedDocs = new Set();
+    let appPassword = null;
+    let msgCount = 0;
 
-  function addMsg(role, text) {
-    const chat = document.getElementById('chat');
-    const div = document.createElement('div');
-    div.className = 'msg ' + (role === 'user' ? 'user' : 'assistant');
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble';
-    bubble.textContent = text;
-    div.appendChild(bubble);
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-  }
-
-  function setSources(sources) {
-    const el = document.getElementById('sources');
-    if (!el) return;
-    if (!sources || sources.length === 0) {
-      el.textContent = '';
-      return;
+    function scrollToMsg(id) {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-    const lines = sources.map(s => `• ${s.blob_name} (chunk ${s.chunk_id}, score ${s.score.toFixed(3)})`);
-    el.textContent = "Sources:\\n" + lines.join("\\n");
-  }
 
-  function showAuthMask(message) {
-    const mask = document.getElementById('authMask');
-    if (!mask) return;
-    mask.classList.add('active');
-    const error = document.getElementById('authError');
-    if (error) {
-      error.textContent = message || '';
+    function addMsg(role, text) {
+      msgCount++;
+      const msgId = 'msg-' + msgCount;
+
+      const chat = document.getElementById('chat');
+      const div = document.createElement('div');
+      div.className = 'msg ' + (role === 'user' ? 'user' : 'assistant');
+      div.id = msgId;
+
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      bubble.innerHTML = marked.parse(text);
+      div.appendChild(bubble);
+      chat.appendChild(div);
+
+      // Add to history list
+      const hist = document.getElementById('historyList');
+      if (hist) {
+        const item = document.createElement('div');
+        item.className = 'hist-item';
+        const roleLabel = role === 'user' ? 'User' : 'Bot';
+        item.innerHTML = `<b>${roleLabel}:</b> ${text}`;
+        item.onclick = () => scrollToMsg(msgId);
+        hist.appendChild(item);
+        hist.scrollTop = hist.scrollHeight;
+      }
+
+      // Auto-scroll chat
+      setTimeout(() => {
+        chat.scrollTop = chat.scrollHeight;
+      }, 10);
     }
-    const input = document.getElementById('authInput');
-    if (input) input.focus();
-  }
 
-  function hideAuthMask() {
-    const mask = document.getElementById('authMask');
-    if (mask) mask.classList.remove('active');
-    const error = document.getElementById('authError');
-    if (error) error.textContent = '';
-  }
+    function setUsageInfo(info) {
+      if (!info) return;
 
-  function ensureAuth() {
-    if (!AUTH_REQUIRED) return true;
-    if (appPassword) return true;
-    showAuthMask('Password required.');
-    return false;
-  }
+      // Tokens: Use actual if available, else estimate
+      const total = info.actual_prompt_tokens || info.context_tokens_estimated || 0;
+      const limit = info.model_limit || 128000;
 
-  async function fetchWithAuth(url, options = {}) {
-    const headers = Object.assign({}, options.headers || {});
-    if (appPassword) {
-      headers['X-App-Password'] = appPassword;
+      const txtEl = document.getElementById('usageTokens');
+      if (info.actual_prompt_tokens) {
+        txtEl.textContent = formatNumber(total) + ' (Actual)';
+      } else {
+        txtEl.textContent = formatNumber(total) + ' (Est)';
+      }
+
+      // Update Bar
+      const pct = Math.min(100, Math.max(0, (total / limit) * 100));
+      const bar = document.getElementById('usageBar');
+      bar.style.width = pct + '%';
+
+      // Color coding
+      if (pct < 50) bar.style.background = 'var(--accent)'; // Green-ish (teal)
+      else if (pct < 80) bar.style.background = '#eab308'; // Yellow
+      else bar.style.background = '#ef4444'; // Red
+
+      document.getElementById('usageCacheAvg').textContent = info.avg_cached_chunks !== undefined ? info.avg_cached_chunks : '-';
+      document.getElementById('usageOutput').textContent = info.completion_tokens !== undefined ? formatNumber(info.completion_tokens) : '-';
+
+      if (info.breakdown) {
+        document.getElementById('usageQuery').textContent = formatNumber(info.breakdown.query);
+        document.getElementById('usageContext').textContent = formatNumber(info.breakdown.context);
+        document.getElementById('usageHistory').textContent = formatNumber(info.breakdown.history);
+        document.getElementById('usageSystem').textContent = formatNumber(info.breakdown.system);
+      }
+      console.log("setUsageInfo: updated UI", info);
     }
-    const r = await fetch(url, { ...options, headers });
-    if (r.status === 401) {
-      appPassword = null;
+
+    function showAuthMask(message) {
+      const mask = document.getElementById('authMask');
+      if (!mask) return;
+      mask.classList.add('active');
+      const error = document.getElementById('authError');
+      if (error) {
+        error.textContent = message || '';
+      }
+      const input = document.getElementById('authInput');
+      if (input) input.focus();
+    }
+
+    function hideAuthMask() {
+      const mask = document.getElementById('authMask');
+      if (mask) mask.classList.remove('active');
+      const error = document.getElementById('authError');
+      if (error) error.textContent = '';
+    }
+
+    function ensureAuth() {
+      if (!AUTH_REQUIRED) return true;
+      if (appPassword) return true;
       showAuthMask('Password required.');
-      throw new Error('Unauthorized');
+      return false;
     }
-    return r;
-  }
 
-  async function attemptAuth() {
-    const input = document.getElementById('authInput');
-    const btn = document.getElementById('authBtn');
-    const password = input ? input.value.trim() : '';
-    if (!password) {
-      showAuthMask('Enter a password to continue.');
-      return;
+    async function fetchWithAuth(url, options = {}) {
+      const headers = Object.assign({}, options.headers || {});
+      if (appPassword) {
+        headers['X-App-Password'] = appPassword;
+      }
+      console.log(`fetchWithAuth: ${options.method || 'GET'} ${url}`);
+      const r = await fetch(url, { ...options, headers });
+      console.log(`fetchWithAuth: ${url} status ${r.status}`);
+      if (r.status === 401) {
+        appPassword = null;
+        showAuthMask('Password required.');
+        throw new Error('Unauthorized');
+      }
+      return r;
     }
-    if (btn) btn.disabled = true;
-    try {
-      const r = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
-      });
-      if (!r.ok) {
-        showAuthMask('Incorrect password.');
+
+    async function attemptAuth() {
+      const input = document.getElementById('authInput');
+      const btn = document.getElementById('authBtn');
+      const password = input ? input.value.trim() : '';
+      if (!password) {
+        showAuthMask('Enter a password to continue.');
         return;
       }
-      appPassword = password;
-      if (input) input.value = '';
-      hideAuthMask();
-      await refreshStatus();
-      await loadDocs();
-    } catch (err) {
-      showAuthMask('Unable to authenticate.');
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  function formatBytes(value) {
-    if (!value && value !== 0) return '';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let size = Number(value);
-    let i = 0;
-    while (size >= 1024 && i < units.length - 1) {
-      size /= 1024;
-      i += 1;
-    }
-    return `${size.toFixed(size >= 10 || i === 0 ? 0 : 1)}${units[i]}`;
-  }
-
-  function updateDocsSummary() {
-    const el = document.getElementById('docsSummary');
-    if (!el) return;
-    el.textContent = `${selectedDocs.size} selected / ${docs.length} docs`;
-  }
-
-  function updateDocsCollapseState() {
-    const list = document.getElementById('docsList');
-    const btn = document.getElementById('toggleDocsBtn');
-    if (!list || !btn) return;
-    if (docsCollapsed) {
-      list.classList.add('collapsed');
-      btn.textContent = 'Expand';
-    } else {
-      list.classList.remove('collapsed');
-      btn.textContent = 'Collapse';
-    }
-  }
-
-  function renderDocs() {
-    const list = document.getElementById('docsList');
-    if (!list) return;
-    list.innerHTML = '';
-
-    if (!docs.length) {
-      const empty = document.createElement('div');
-      empty.className = 'doc-empty';
-      empty.textContent = 'No supported documents found.';
-      list.appendChild(empty);
-      updateDocsSummary();
-      return;
+      if (btn) btn.disabled = true;
+      try {
+        const r = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        if (!r.ok) {
+          showAuthMask('Incorrect password.');
+          return;
+        }
+        appPassword = password;
+        if (input) input.value = '';
+        hideAuthMask();
+        await refreshStatus();
+        await loadDocs();
+        await loadModels(); // Models
+      } catch (err) {
+        showAuthMask('Unable to authenticate.');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
-    docs.forEach((doc) => {
-      const row = document.createElement('label');
-      row.className = 'doc-item';
+    function formatBytes(value) {
+      if (!value && value !== 0) return '';
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      let size = Number(value);
+      let i = 0;
+      while (size >= 1024 && i < units.length - 1) {
+        size /= 1024;
+        i += 1;
+      }
+      return `${size.toFixed(size >= 10 || i === 0 ? 0 : 1)}${units[i]}`;
+    }
+
+    function formatNumber(value) {
+      if (value === null || value === undefined) return '0';
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value.toLocaleString() : '0';
+      }
+      return String(value);
+    }
+
+    function updateDocsSummary() {
+      const el = document.getElementById('docsSummary');
+      if (!el) return;
+      el.textContent = `${selectedDocs.size} selected`;
+    }
+
+    function renderDocs() {
+      const list = document.getElementById('docsList');
+      if (!list) return;
+      list.innerHTML = '';
+
+      if (!docs.length) {
+        list.innerHTML = '<div style="font-size:11px; color:#999; text-align:center; padding:20px;">No documents found.</div>';
+        updateDocsSummary();
+        return;
+      }
+
+      docs.forEach((doc) => {
+        const row = document.createElement('label');
+        row.className = 'doc-item';
+        // ... existing rendering code ...
+        // (Re-stating briefly since this chunk is small, but tool usage implies replace)
+        // Wait, I should not cut off the function.
+        // I will append the JS logic at the end of the script instead of interrupting here.
+        // Skipping this chunk edit to avoid context matching issues inside renderDocs.
+      });
 
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.checked = selectedDocs.has(doc.name);
       checkbox.addEventListener('change', () => {
-        if (checkbox.checked) {
-          selectedDocs.add(doc.name);
-        } else {
-          selectedDocs.delete(doc.name);
-        }
+        if (checkbox.checked) selectedDocs.add(doc.name);
+        else selectedDocs.delete(doc.name);
         updateDocsSummary();
       });
+
+      const info = document.createElement('div');
+      info.className = 'doc-info';
 
       const name = document.createElement('span');
       name.className = 'doc-name';
       name.textContent = doc.name;
 
-      const extra = document.createElement('div');
-      extra.className = 'doc-extra';
-
-      const badge = document.createElement('span');
-      badge.className = `doc-badge ${doc.cache_status || 'missing'}`;
-      badge.textContent = doc.cache_status || 'missing';
-
       const meta = document.createElement('span');
       meta.className = 'doc-meta';
-      const metaParts = [];
-      if (doc.last_modified) metaParts.push(doc.last_modified);
-      const size = formatBytes(doc.size);
-      if (size) metaParts.push(size);
-      meta.textContent = metaParts.join(' | ');
+      const parts = [];
+      if (doc.cache_status) parts.push(doc.cache_status);
+      if (doc.size) parts.push(formatBytes(doc.size));
+      meta.textContent = parts.join(' | ');
 
-      extra.appendChild(badge);
-      if (meta.textContent) {
-        extra.appendChild(meta);
-      }
+      info.appendChild(name);
+      info.appendChild(meta);
 
       row.appendChild(checkbox);
-      row.appendChild(name);
-      row.appendChild(extra);
+      row.appendChild(info);
       list.appendChild(row);
     });
-
     updateDocsSummary();
-    updateDocsCollapseState();
-  }
-
-  async function loadDocs() {
-    if (!ensureAuth()) return;
-    const list = document.getElementById('docsList');
-    if (list) {
-      list.innerHTML = '';
     }
-    try {
-      const r = await fetchWithAuth('/api/docs');
-      const j = await r.json();
-      docs = j.docs || [];
-      selectedDocs = new Set(j.selected || docs.filter(d => d.selected).map(d => d.name));
-      renderDocs();
-    } catch (err) {
-      docs = [];
-      selectedDocs = new Set();
-      renderDocs();
-    }
-  }
 
-  function setAllDocs(selected) {
-    if (selected) {
-      selectedDocs = new Set(docs.map(d => d.name));
+    async function loadDocs() {
+      console.log("loadDocs: called");
+      if (!ensureAuth()) return;
+      const list = document.getElementById('docsList');
+      if (list) list.innerHTML = '<div style="padding:10px; font-size:11px;">Loading docs...</div>';
+
+      try {
+        const r = await fetchWithAuth('/api/docs');
+        const j = await r.json();
+        docs = j.docs || [];
+        selectedDocs = new Set(j.selected || docs.filter(d => d.selected).map(d => d.name));
+        renderDocs();
+      } catch (err) {
+        console.error("loadDocs error", err);
+        docs = [];
+        selectedDocs = new Set();
+        renderDocs();
+      }
+    }
+
+    function setAllDocs(selected) {
+      if (selected) {
+        selectedDocs = new Set(docs.map(d => d.name));
+      } else {
+        selectedDocs = new Set();
+      }
+      renderDocs();
+      // Also trigger render to show checkboxes correctly
+      // (renderDocs does this)
+    }
+
+
+
+    let modelsData = {};
+
+    async function loadModels() {
+      console.log("loadModels: called");
+      if (!ensureAuth()) {
+        console.log("loadModels: auth not valid");
+        return;
+      }
+      try {
+        console.log("loadModels: fetching /api/models");
+        const r = await fetchWithAuth('/api/models');
+        console.log("loadModels: response status", r.status);
+        const j = await r.json();
+        console.log("loadModels: data", j);
+        const sel = document.getElementById('modelSelect');
+        sel.innerHTML = '';
+
+        modelsData = {};
+        j.models.forEach(m => {
+          modelsData[m.id] = m;
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.name;
+          if (m.id === j.default) opt.selected = true;
+          sel.appendChild(opt);
+        });
+
+        sel.addEventListener('change', updateModelDisplay);
+        updateModelDisplay();
+      } catch (err) {
+        console.error("Failed to load models", err);
+        const sel = document.getElementById('modelSelect');
+        if (sel) {
+          sel.innerHTML = '<option disabled selected>Error loading models</option>';
+        }
+      }
+    }
+
+    function updateModelDisplay() {
+      const id = document.getElementById('modelSelect').value;
+      const m = modelsData[id];
+      if (!m) return;
+
+      document.getElementById('modelDesc').textContent = m.desc.split('(')[0].trim();
+
+      const fmtPrice = (p) => p !== undefined ? '$' + p.toFixed(2) : '-';
+      document.getElementById('modelPrices').innerHTML =
+        `<b>Input:</b> ${fmtPrice(m.price_in)} / 1M<br/>` +
+        `<b>Cached:</b> ${fmtPrice(m.price_cache)} / 1M<br/>` +
+        `<b>Output:</b> ${fmtPrice(m.price_out)} / 1M`;
+    }
+
+    async function refreshStatus() {
+      console.log("refreshStatus: called");
+      if (!ensureAuth()) return;
+      try { // Added try/catch for logging
+        const r = await fetchWithAuth('/api/status');
+        const j = await r.json();
+        console.log("refreshStatus: header", j);
+
+        // Build vertical list
+        const rows = [
+          { label: 'Status', val: j.ready ? 'Online' : 'Not built' },
+          { label: 'Blobs', val: formatNumber(j.blobs) },
+          { label: 'Chunks', val: formatNumber(j.chunks) },
+          { label: 'Tokens', val: formatNumber(j.tokens) },
+          { label: 'Dim', val: j.dim ?? '-' },
+          { label: 'Model', val: j.model },
+        ];
+
+        const html = rows.map(r => `
+        <div class="stat-row">
+          <span class="stat-label">${r.label}</span>
+          <span class="stat-val">${r.val}</span>
+        </div>
+      `).join('');
+
+        document.getElementById('status').innerHTML = html;
+      } catch (e) {
+        console.error("refreshStatus failed", e);
+      }
+    }
+
+    function addThinking() {
+      removeThinking();
+      const chat = document.getElementById('chat');
+      const div = document.createElement('div');
+      div.className = 'msg assistant';
+      div.id = 'thinkingMsg';
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble thinking';
+
+      const text = document.createElement('span');
+      text.textContent = 'Thinking';
+
+      const dots = document.createElement('span');
+      dots.className = 'animated-dots';
+
+      bubble.appendChild(text);
+      bubble.appendChild(dots);
+      div.appendChild(bubble);
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function removeThinking() {
+      const existing = document.getElementById('thinkingMsg');
+      if (existing) existing.remove();
+    }
+
+    async function send() {
+      const inp = document.getElementById('input');
+      const text = inp.value.trim();
+      if (!text) return;
+      if (!ensureAuth()) return;
+
+      // Get mode
+      const mode = document.querySelector('input[name="chatMode"]:checked').value;
+      const model = document.getElementById('modelSelect').value;
+
+      inp.value = '';
+      addMsg('user', text);
+      addThinking();
+
+      try {
+        const r = await fetchWithAuth('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text, conversation_id: conversationId, mode: mode, model: model })
+        });
+        const j = await r.json();
+        conversationId = j.conversation_id;
+        removeThinking();
+
+        // Answer
+        addMsg('assistant', j.answer);
+
+        // If sources, append them as a separate bubble or text?
+        // Old app had setSources in separate div. Let's append to chat.
+        if (j.sources && j.sources.length > 0) {
+          const lines = j.sources.map(s => `• ${s.blob_name} (chunk ${s.chunk_id})`);
+          const sourceText = "Sources:\n" + lines.join("\n");
+          // Optional: add as system msg or just appended
+          // Use a lighter bubble
+          const chat = document.getElementById('chat');
+          const sDiv = document.createElement('div');
+          sDiv.className = 'msg assistant';
+          sDiv.style.marginTop = '-8px';
+          const sBub = document.createElement('div');
+          sBub.className = 'bubble';
+          sBub.style.fontSize = '11px';
+          sBub.style.color = 'var(--muted)';
+          sBub.textContent = sourceText;
+          sDiv.appendChild(sBub);
+          chat.appendChild(sDiv);
+        }
+
+        setUsageInfo(j.usage_info);
+        console.log("send: success", j);
+      } catch (err) {
+        console.error("send: error", err);
+        removeThinking();
+        addMsg('assistant', 'Sorry, something went wrong while contacting the server.');
+      }
+    }
+
+    document.getElementById('send').addEventListener('click', send);
+    document.getElementById('input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') send();
+    });
+
+    document.getElementById('authBtn').addEventListener('click', attemptAuth);
+    document.getElementById('authInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') attemptAuth();
+    });
+
+    document.getElementById('selectAllBtn').addEventListener('click', () => {
+      setAllDocs(true);
+    });
+
+    document.getElementById('selectNoneBtn').addEventListener('click', () => {
+      setAllDocs(false);
+    });
+
+    document.getElementById('reindexBtn').addEventListener('click', async () => {
+      if (!ensureAuth()) return;
+      const btn = document.getElementById('reindexBtn');
+      btn.disabled = true;
+      document.getElementById('reindexOut').textContent = 'Running...';
+      try {
+        const payload = { selected_blobs: Array.from(selectedDocs) };
+        const r = await fetchWithAuth('/api/reindex', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const j = await r.json();
+        if (!j.ok) {
+          document.getElementById('reindexOut').textContent = 'Error: ' + JSON.stringify(j);
+        } else {
+          document.getElementById('reindexOut').textContent = `Done. Indexed ${j.indexed_files} files in ${j.seconds}s`;
+          await refreshStatus();
+          await loadDocs();
+        }
+      } catch (err) {
+        console.error("reindex: error", err);
+        document.getElementById('reindexOut').textContent = 'Reindex failed.';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // ----------------------------------------------------
+    // Mobile Tab Logic
+    // ----------------------------------------------------
+    function setMobileTab(tab) {
+      if (window.innerWidth > 900) return;
+
+      const pLeft = document.getElementById('panel-left');
+      const pCenter = document.getElementById('panel-center');
+      const pRight = document.getElementById('panel-right');
+
+      // Default to hiding all
+      if (pLeft) pLeft.style.display = 'none';
+      if (pCenter) pCenter.style.display = 'none';
+      if (pRight) pRight.style.display = 'none';
+
+      // Show Target
+      if (tab === 'model' && pLeft) pLeft.style.display = 'flex';
+      if (tab === 'chat' && pCenter) pCenter.style.display = 'flex';
+      if (tab === 'docs' && pRight) pRight.style.display = 'flex';
+
+      // Update Nav Visuals
+      ['model', 'chat', 'docs'].forEach(t => {
+        const el = document.getElementById('nav-' + t);
+        if (!el) return;
+        if (t === tab) {
+          el.style.opacity = '1';
+          el.style.textDecoration = 'underline';
+        } else {
+          el.style.opacity = '0.5';
+          el.style.textDecoration = 'none';
+        }
+      });
+    }
+
+    // Listen for resize to reset desktop state
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 900) {
+        // Reset to desktop styles (remove inline display styles)
+        const pLeft = document.getElementById('panel-left');
+        const pCenter = document.getElementById('panel-center');
+        const pRight = document.getElementById('panel-right');
+        if (pLeft) pLeft.style.display = '';
+        if (pCenter) pCenter.style.display = '';
+        if (pRight) pRight.style.display = '';
+      } else {
+        // Apply current tab (heuristic: check nav state or default to chat)
+        const active = document.querySelector('#mobile-nav span[style*="text-decoration: underline"]');
+        const tab = active ? active.id.replace('nav-', '') : 'chat';
+        setMobileTab(tab);
+      }
+    });
+
+    // Initial Mobile Check
+    if (window.innerWidth <= 900) {
+      setMobileTab('chat');
+    }
+
+    if (AUTH_REQUIRED) {
+      showAuthMask('');
     } else {
-      selectedDocs = new Set();
+      (async () => {
+        try {
+          console.log("Startup init via IIFE");
+          // Run these partly in parallel or just sequentially but safely
+          refreshStatus().catch(e => console.error("Startup: refreshStatus fail", e));
+          loadDocs().catch(e => console.error("Startup: loadDocs fail", e));
+          loadModels().catch(e => console.error("Startup: loadModels fail", e));
+        } catch (e) { console.error("Startup IIFE fatal", e); }
+      })();
     }
-    renderDocs();
-  }
-
-  function formatNumber(value) {
-    if (value === null || value === undefined) return '0';
-    if (typeof value === 'number') {
-      return Number.isFinite(value) ? value.toLocaleString() : '0';
-    }
-    return String(value);
-  }
-
-  function formatAverage(value) {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return '0';
-    if (value % 1 === 0) return value.toLocaleString();
-    return value.toFixed(2);
-  }
-
-  async function refreshStatus() {
-    if (!ensureAuth()) return;
-    const r = await fetchWithAuth('/api/status');
-    const j = await r.json();
-    const parts = [];
-    parts.push(j.ready ? 'Index: ready' : 'Index: not built');
-    parts.push(`blobs ${formatNumber(j.blobs)}`);
-    parts.push(`chunks ${formatNumber(j.chunks)}`);
-    parts.push(`tokens ${formatNumber(j.tokens)}`);
-    parts.push(`avg/chunk ${formatAverage(j.avg_tokens_per_chunk)}`);
-    parts.push(`chars ${formatNumber(j.total_chars)}`);
-    parts.push(`dim ${j.dim ?? '-'}`);
-    parts.push(`model ${j.model || '-'}`);
-    parts.push(`embed ${j.embed_model || '-'}`);
-    if (j.last_modified_max) {
-      parts.push(`latest ${j.last_modified_max}`);
-    }
-    document.getElementById('status').textContent = parts.join(' | ');
-  }
-
-  function addThinking() {
-    removeThinking();
-    const chat = document.getElementById('chat');
-    const div = document.createElement('div');
-    div.className = 'msg assistant';
-    div.id = 'thinkingMsg';
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble thinking';
-    const spin = document.createElement('span');
-    spin.className = 'spinner';
-    const text = document.createElement('span');
-    text.textContent = 'Thinking...';
-    bubble.appendChild(spin);
-    bubble.appendChild(text);
-    div.appendChild(bubble);
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-  }
-
-  function removeThinking() {
-    const existing = document.getElementById('thinkingMsg');
-    if (existing) existing.remove();
-  }
-
-  async function send() {
-    const inp = document.getElementById('input');
-    const text = inp.value.trim();
-    if (!text) return;
-    if (!ensureAuth()) return;
-    inp.value = '';
-    addMsg('user', text);
-    setSources([]);
-    addThinking();
-
-    try {
-      const r = await fetchWithAuth('/api/chat', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ message: text, conversation_id: conversationId })
-      });
-      const j = await r.json();
-      conversationId = j.conversation_id;
-      removeThinking();
-      addMsg('assistant', j.answer);
-      setSources(j.sources || []);
-    } catch (err) {
-      removeThinking();
-      addMsg('assistant', 'Sorry, something went wrong while contacting the server.');
-    } finally {
-      removeThinking();
-    }
-  }
-
-  document.getElementById('send').addEventListener('click', send);
-  document.getElementById('input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') send();
-  });
-
-  document.getElementById('authBtn').addEventListener('click', attemptAuth);
-  document.getElementById('authInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') attemptAuth();
-  });
-
-  document.getElementById('toggleDocsBtn').addEventListener('click', () => {
-    docsCollapsed = !docsCollapsed;
-    updateDocsCollapseState();
-  });
-
-  document.getElementById('selectAllBtn').addEventListener('click', () => {
-    setAllDocs(true);
-  });
-
-  document.getElementById('selectNoneBtn').addEventListener('click', () => {
-    setAllDocs(false);
-  });
-
-  document.getElementById('reindexBtn').addEventListener('click', async () => {
-    if (!ensureAuth()) return;
-    const btn = document.getElementById('reindexBtn');
-    btn.disabled = true;
-    document.getElementById('reindexOut').textContent = 'Running...';
-    try {
-      const payload = { selected_blobs: Array.from(selectedDocs) };
-      const r = await fetchWithAuth('/api/reindex', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
-      });
-      const j = await r.json();
-      const out = j.ok
-        ? `Indexed ${j.indexed_files} files (cached ${j.cached_files}, embedded ${j.embedded_files}, chunks ${j.chunks}) in ${j.seconds}s`
-        : JSON.stringify(j);
-      document.getElementById('reindexOut').textContent = out;
-      await refreshStatus();
-      await loadDocs();
-    } catch (err) {
-      document.getElementById('reindexOut').textContent = 'Reindex failed.';
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  if (AUTH_REQUIRED) {
-    showAuthMask('');
-  } else {
-    refreshStatus();
-    loadDocs();
-  }
-</script>
+  </script>
 </body>
+
 </html>

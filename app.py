@@ -90,11 +90,64 @@ CHUNK_TOKENS = int(os.getenv("RAG_CHUNK_TOKENS", "800"))
 CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "120"))
 TOP_K = int(os.getenv("RAG_TOP_K", "6"))
 MAX_CONTEXT_CHUNKS = int(os.getenv("RAG_MAX_CONTEXT_CHUNKS", "6"))
+MODEL_LIMIT = 128000 # GPT-4o / mini limit
 
 # Server-side conversation memory (very simple)
 MAX_TURNS = int(os.getenv("CHAT_MAX_TURNS", "12"))
 
 ALLOWED_EXTS = {".txt", ".md", ".markdown", ".pdf", ".docx", ".html", ".htm"}
+
+# Model Definitions
+MODELS = [
+    {"id": "gpt-5.2", "name": "gpt-5.2", "desc": "Best overall reasoning/coding ($1.75/1M in)", "price_in": 1.75, "price_cache": 0.18, "price_out": 14.00},
+    {"id": "gpt-5.1", "name": "gpt-5.1", "desc": "Strong reasoning, cheaper ($1.25/1M in)", "price_in": 1.25, "price_cache": 0.13, "price_out": 10.00},
+    {"id": "gpt-5-mini", "name": "gpt-5-mini", "desc": "Fast + cost-efficient ($0.25/1M in)", "price_in": 0.25, "price_cache": 0.03, "price_out": 2.00},
+    {"id": "gpt-5-nano", "name": "gpt-5-nano", "desc": "Cheapest GPT-5 family ($0.05/1M in)", "price_in": 0.05, "price_cache": 0.01, "price_out": 0.40},
+    {"id": "gpt-4.1", "name": "gpt-4.1", "desc": "Smartest non-reasoning ($2.00/1M in)", "price_in": 2.00, "price_cache": 0.50, "price_out": 8.00},
+    {"id": "gpt-4.1-mini", "name": "gpt-4.1-mini", "desc": "Balanced price/perf ($0.40/1M in)", "price_in": 0.40, "price_cache": 0.10, "price_out": 1.60},
+    {"id": "gpt-4.1-nano", "name": "gpt-4.1-nano", "desc": "Very cheap text+vision ($0.10/1M in)", "price_in": 0.10, "price_cache": 0.025, "price_out": 0.40},
+    {"id": "gpt-4o", "name": "gpt-4o", "desc": "Fast 'omni' general ($2.50/1M in)", "price_in": 2.50, "price_cache": 1.25, "price_out": 10.00},
+    {"id": "gpt-4o-mini", "name": "gpt-4o-mini", "desc": "Cheapest mainstream ($0.15/1M in)", "price_in": 0.15, "price_cache": 0.075, "price_out": 0.60},
+    {"id": "o3", "name": "o3", "desc": "Reasoning model ($2.00/1M in)", "price_in": 2.00, "price_cache": 0.50, "price_out": 8.00},
+    {"id": "o4-mini", "name": "o4-mini", "desc": "Cheaper reasoning ($1.10/1M in)", "price_in": 1.10, "price_cache": 0.28, "price_out": 4.40},
+    {"id": "o1", "name": "o1", "desc": "Heavy reasoning ($15.00/1M in)", "price_in": 15.00, "price_cache": 7.50, "price_out": 60.00},
+]
+
+
+
+# -----------------------------
+# Conversation Memory (In-Memory)
+# -----------------------------
+class ConversationManager:
+    def __init__(self, max_turns: int = 12):
+        self._chats: Dict[str, List[Dict[str, str]]] = {}
+        self.max_turns = max_turns
+
+    def get_history(self, conversation_id: str) -> List[Dict[str, str]]:
+        return self._chats.get(conversation_id, [])
+
+    def add_turn(self, conversation_id: str, user_msg: str, assistant_msg: str, stats: Optional[Dict[str, float]] = None):
+        if conversation_id not in self._chats:
+            self._chats[conversation_id] = []
+        
+        history = self._chats[conversation_id]
+        history.append({"role": "user", "content": user_msg})
+        
+        # Store stats in assistant message metadata if needed, 
+        # or just as a separate field in the turn object ideally.
+        # For simplicity, we tack it onto the assistant message object
+        assistant_turn = {"role": "assistant", "content": assistant_msg}
+        if stats:
+             assistant_turn["stats"] = stats
+             
+        history.append(assistant_turn)
+        
+        # Simple turn-based expiration for now
+        if len(history) > self.max_turns * 2:
+            history = history[-(self.max_turns * 2):]
+            self._chats[conversation_id] = history
+
+conversation_manager = ConversationManager(MAX_TURNS)
 
 
 # -----------------------------
@@ -183,8 +236,16 @@ def log_env_config() -> None:
         logger.info("  %s=%s", key, _format_env_value(key, value))
 
 
+def is_local(request: Request) -> bool:
+    client = request.client
+    if not client:
+        return False
+    return client.host in ("127.0.0.1", "localhost", "::1")
+
 def enforce_auth(request: Request) -> None:
     if not AUTH_REQUIRED:
+        return
+    if is_local(request):
         return
     password = request.headers.get("x-app-password", "")
     if not password or password != APP_PASSWORD:
@@ -209,6 +270,25 @@ def clean_text(s: str) -> str:
 def get_tokenizer():
     # cl100k_base works well for modern OpenAI text models
     return tiktoken.get_encoding("cl100k_base")
+
+
+def count_messages_tokens(messages: List[Dict[str, str]], model: str = "gpt-4o") -> int:
+    """Return the number of tokens used by a list of messages."""
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+    except KeyError:
+        encoding = tiktoken.get_encoding("cl100k_base")
+        
+    tokens_per_message = 3
+    num_tokens = 0
+    for message in messages:
+        num_tokens += tokens_per_message
+        for key, value in message.items():
+            num_tokens += len(encoding.encode(str(value)))
+            if key == "name":
+                num_tokens += 1
+    num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
+    return num_tokens
 
 
 def compute_corpus_stats(meta: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -492,6 +572,10 @@ def normalize_chunk_meta(
 
 
 def extract_answer_text(response_obj: Any) -> str:
+    # Handle ChatCompletion object
+    if hasattr(response_obj, "choices") and response_obj.choices:
+        return response_obj.choices[0].message.content or ""
+
     # SDKs may support output_text for convenience :contentReference[oaicite:4]{index=4}
     if hasattr(response_obj, "output_text") and response_obj.output_text:
         return response_obj.output_text
@@ -738,6 +822,15 @@ class RagIndex:
             hits.append(m)
         return hits
 
+    def get_full_context(self) -> str:
+        if not self.is_ready():
+            return ""
+        # Join all text from all chunks in order
+        # Assuming chunks are stored in order in meta
+        # A safer way might be to group by blob and sort by chunk_id, but current simple impl might suffice
+        return "\n\n".join([m.get("text", "") for m in self.meta])
+
+
 
 # -----------------------------
 # FastAPI app
@@ -750,12 +843,29 @@ rag = RagIndex()
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
+    mode: str = "rag"  # "rag", "direct", "cache"
+    model: Optional[str] = None # e.g. "gpt-4o"
 
 
 class ChatResponse(BaseModel):
     conversation_id: str
     answer: str
     sources: List[Dict[str, Any]]
+    usage_info: Dict[str, Any]
+
+
+class ModelInfo(BaseModel):
+    id: str
+    name: str
+    desc: str
+    price_in: float
+    price_cache: float
+    price_out: float
+
+
+class ModelsResponse(BaseModel):
+    models: List[ModelInfo]
+    default: str
 
 
 class AuthRequest(BaseModel):
@@ -768,6 +878,10 @@ class ReindexRequest(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
+    # Ensure logs are visible
+    logging.basicConfig(level=logging.INFO)
+    logger.setLevel(logging.INFO)
+
     # Try load an existing index; if missing, we don't auto-build (often better to control explicitly).
     # You can hit POST /api/reindex to build.
     if AUTH_REQUIRED and not APP_PASSWORD:
@@ -778,14 +892,19 @@ def startup_event():
 
 
 @app.get("/", response_class=HTMLResponse)
-def root():
+def root(request: Request):
     if not INDEX_HTML_PATH.exists():
         return HTMLResponse(
             "<!doctype html><html><body><h1>Server misconfigured</h1><p>Missing index.html</p></body></html>",
             status_code=500,
         )
     html = INDEX_HTML_PATH.read_text(encoding="utf-8")
-    return HTMLResponse(html.replace("__AUTH_REQUIRED__", "true" if AUTH_REQUIRED else "false"))
+    
+    # Determine if auth is strictly required for this user
+    # If local, treated as not required
+    req_auth = AUTH_REQUIRED and not is_local(request)
+    
+    return HTMLResponse(html.replace("__AUTH_REQUIRED__", "true" if req_auth else "false"))
 
 
 @app.get("/healthz")
@@ -822,6 +941,7 @@ def auth(req: AuthRequest):
 
 @app.get("/api/docs")
 def list_docs(request: Request):
+    logger.info("API: list_docs called")
     enforce_auth(request)
     if not (AZURE_STORAGE_CONNECTION_STRING or (AZURE_STORAGE_ACCOUNT and AZURE_STORAGE_CONTAINER)):
         raise HTTPException(
@@ -868,6 +988,7 @@ def list_docs(request: Request):
 
 @app.get("/api/status")
 def status(request: Request):
+    logger.info("API: status called")
     enforce_auth(request)
     stats = rag.stats if hasattr(rag, "stats") else compute_corpus_stats(rag.meta)
     return {
@@ -898,6 +1019,16 @@ def reindex(request: Request, req: Optional[ReindexRequest] = None):
     return result
 
 
+@app.get("/api/models", response_model=ModelsResponse)
+def get_models(request: Request):
+    logger.info("API: get_models called")
+    enforce_auth(request)
+    return ModelsResponse(models=MODELS, default=OPENAI_MODEL)
+
+
+
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(request: Request, req: ChatRequest):
     enforce_auth(request)
@@ -905,40 +1036,149 @@ def chat(request: Request, req: ChatRequest):
     if not msg:
         raise HTTPException(status_code=400, detail="message is required")
 
-    # Conversation ID
     conv_id = req.conversation_id or str(uuid.uuid4())
+    mode = req.mode.lower() if req.mode else "rag"
+    
+    # Select Model
+    selected_model = req.model or OPENAI_MODEL
+    
+    # 1. Retrieve Context
+    context_text = ""
+    hits = []
+    
+    if mode == "rag":
+        hits = rag.search(msg, k=TOP_K) if rag.is_ready() else []
+        hits = hits[:MAX_CONTEXT_CHUNKS]
+        context_blocks = []
+        for h in hits:
+            context_blocks.append(
+                f"[SOURCE: {h['blob_name']} | chunk {h['chunk_id']}]\n{h['text']}"
+            )
+        context_text = "\n\n---\n\n".join(context_blocks).strip()
+        
+    elif mode in {"direct", "cache"}:
+        # Use full text of all indexed docs
+        context_text = rag.get_full_context()
+        # No specific hits for source highlighting, but we can list blobs?
+        # For now, empty hits list as we are using "All Scoped"
+        
+    # 2. Build Message List
+    messages = []
+    
+    # SYSTEM
+    messages.append({"role": "system", "content": SYSTEM_INSTRUCTIONS})
+    
+    # CONTEXT & HISTORY
+    # Cache Mode: System -> Context -> History -> User (Stable Prefix)
+    # RAG/Direct Mode: System -> History -> Context -> User (Standard)
+    
+    history = conversation_manager.get_history(conv_id)
+    
+    if mode == "cache":
+        # Context first (Pinned)
+        if context_text:
+             messages.append({
+                "role": "user", 
+                "content": f"Reference Context:\n\n{context_text}"
+            })
+             
+        # Then History
+        messages.extend(history)
+        
+    else:
+        # History first
+        messages.extend(history)
+        
+        # Then Context
+        if context_text:
+            messages.append({
+                "role": "user", 
+                "content": f"Here is the retrieved context for the next question:\n\n{context_text}"
+            })
 
-    # Retrieve context
-    hits = rag.search(msg, k=TOP_K) if rag.is_ready() else []
-    hits = hits[:MAX_CONTEXT_CHUNKS]
+    # USER
+    messages.append({"role": "user", "content": msg})
+    
+    
+    # 3. Calculate Tokens
+    # We calculate separately to give usage breakdown
+    
+    # Helper to count safe
+    def count(msgs):
+        return count_messages_tokens(msgs, model=selected_model) # Use selected model for counting
 
-    context_blocks = []
-    for h in hits:
-        context_blocks.append(
-            f"[SOURCE: {h['blob_name']} | chunk {h['chunk_id']}]\n{h['text']}"
-        )
-    context = "\n\n---\n\n".join(context_blocks).strip()
+    tok_system = count([{"role": "system", "content": SYSTEM_INSTRUCTIONS}])
+    tok_history = count(history)
+    tok_context = 0
+    if context_text:
+        # Context message is user role
+        # We need to reconstruct the exact message used above to be accurate
+        # But for breakdown, we can just measure the content payload roughly or the specific message
+        # Let's count the actual message object added
+        ctx_msg = {"role": "user", "content": f"Reference Context:\n\n{context_text}"} if mode == "cache" else {"role": "user", "content": f"Here is the retrieved context for the next question:\n\n{context_text}"}
+        tok_context = count([ctx_msg])
+    
+    tok_query = count([{"role": "user", "content": msg}])
+    
+    total_tokens = count(messages) # Accurate total for API
 
-    system_instructions = SYSTEM_INSTRUCTIONS
+    
+    oldest_turn_info = "N/A"
+    if history:
+        # User message is at index 0 of history list
+        first_hist = history[0]
+        oldest_turn_info = f"Role: {first_hist['role']}, Preview: {first_hist['content'][:30]}..."
 
-    user_prompt = ""
-
-    if context:
-        user_prompt += f"Sources:\n{context}\n\n"
-
-    user_prompt += f"User question:\n{msg}"
-
-    # Call OpenAI Responses API :contentReference[oaicite:7]{index=7}
+    # 4. Call OpenAI
     client = openai_client()
-    resp = client.responses.create(
-        model=OPENAI_MODEL,
-        instructions=system_instructions,
-        input=user_prompt,
+    resp = client.chat.completions.create(
+        model=selected_model,
+        messages=messages,
     )
-
+    
     answer = extract_answer_text(resp).strip()
+    
+    # Capture Cache Stats & Actual Tokens
+    cached_tokens = 0
+    actual_prompt_tokens = 0
+    completion_tokens = 0
+    
+    if hasattr(resp, "usage") and resp.usage:
+        actual_prompt_tokens = resp.usage.prompt_tokens
+        completion_tokens = resp.usage.completion_tokens
+        
+        # prompt_tokens_details is available in recent models
+        details = getattr(resp.usage, "prompt_tokens_details", None)
+        if details:
+             cached_tokens = getattr(details, "cached_tokens", 0)
 
-    # Return sources without full chunk text
+    # Calculate Cached Chunks
+    # Get avg chunk size
+    corpus_stats = rag.stats if hasattr(rag, "stats") else {}
+    avg_chunk_size = corpus_stats.get("avg_tokens_per_chunk", 0) or CHUNK_TOKENS # fallback
+    
+    cached_chunks_est = 0
+    if avg_chunk_size > 0:
+        cached_chunks_est = cached_tokens / avg_chunk_size
+        
+    # 5. Update History with stats
+    conversation_manager.add_turn(conv_id, msg, answer, stats={"cached_chunks": cached_chunks_est})
+    
+    # Calculate Aggregate Average from History
+    # Iterate history, sum up 'stats.cached_chunks' for assistant messages
+    hist_entries = conversation_manager.get_history(conv_id)
+    total_cached = 0.0
+    count_turns = 0
+    for m in hist_entries:
+        if m.get("role") == "assistant" and "stats" in m:
+            total_cached += m["stats"].get("cached_chunks", 0.0)
+            count_turns += 1
+            
+    avg_cached_chunks = 0.0
+    if count_turns > 0:
+        avg_cached_chunks = total_cached / count_turns
+
+    # Return structure
     sources = [
         {
             "blob_name": h["blob_name"],
@@ -949,8 +1189,30 @@ def chat(request: Request, req: ChatRequest):
         }
         for h in hits
     ]
+    
+    usage_info = {
+        "context_tokens_estimated": total_tokens,
+        "actual_prompt_tokens": actual_prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "model_limit": MODEL_LIMIT,
+        "breakdown": {
+            "system": tok_system,
+            "history": tok_history,
+            "context": tok_context,
+            "query": tok_query
+        },
+        "oldest_history_turn": oldest_turn_info,
+        "history_turns_count": len(history) // 2,
+        "mode": mode,
+        "avg_cached_chunks": round(avg_cached_chunks, 1)
+    }
 
-    return ChatResponse(conversation_id=conv_id, answer=answer, sources=sources)
+    return ChatResponse(
+        conversation_id=conv_id, 
+        answer=answer, 
+        sources=sources,
+        usage_info=usage_info
+    )
 
 
 # Entry point for: python app.py
