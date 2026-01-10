@@ -1,4 +1,6 @@
 import os
+print("DEBUG: Starting app.py execution...")
+
 import io
 import re
 import json
@@ -23,7 +25,9 @@ from azure.storage.blob import BlobServiceClient
 
 from openai import OpenAI
 
+print("DEBUG: Imports completed. Loading dotenv...")
 DOTENV_LOADED = load_dotenv()
+
 logger = logging.getLogger("rag_app")
 
 TRUE_VALUES = {"1", "true", "t", "yes", "y", "on"}
@@ -1217,6 +1221,9 @@ def chat(request: Request, req: ChatRequest):
 
 # Entry point for: python app.py
 if __name__ == "__main__":
+    print("DEBUG: Entering main block...")
     import uvicorn
+    print("DEBUG: Starting uvicorn...")
+
 
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
