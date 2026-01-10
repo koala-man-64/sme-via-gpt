@@ -27,31 +27,31 @@ set -euo pipefail
 LAW_NAME="${APP_NAME}-law"
 STORAGE_CONNSTR_SECRET_NAME="storage-connstr" # Container Apps secret name max length is 20
 
-az group create -n "${RG}" -l "${LOCATION}" 1>/dev/null
+az group create -n "${RG}" -l "${LOCATION}"
 
-if ! az monitor log-analytics workspace show -g "${RG}" -n "${LAW_NAME}" 1>/dev/null 2>&1; then
-  az monitor log-analytics workspace create -g "${RG}" -n "${LAW_NAME}" -l "${LOCATION}" 1>/dev/null
+if ! az monitor log-analytics workspace show -g "${RG}" -n "${LAW_NAME}"; then
+  az monitor log-analytics workspace create -g "${RG}" -n "${LAW_NAME}" -l "${LOCATION}"
 fi
 LAW_ID="$(az monitor log-analytics workspace show -g "${RG}" -n "${LAW_NAME}" --query customerId -o tsv)"
 LAW_KEY="$(az monitor log-analytics workspace get-shared-keys -g "${RG}" -n "${LAW_NAME}" --query primarySharedKey -o tsv)"
 
-if ! az containerapp env show -n "${ENV_NAME}" -g "${RG}" 1>/dev/null 2>&1; then
+if ! az containerapp env show -n "${ENV_NAME}" -g "${RG}"; then
   az containerapp env create -n "${ENV_NAME}" -g "${RG}" -l "${LOCATION}" \
-    --logs-workspace-id "${LAW_ID}" --logs-workspace-key "${LAW_KEY}" 1>/dev/null
+    --logs-workspace-id "${LAW_ID}" --logs-workspace-key "${LAW_KEY}"
 fi
 
-if ! az acr show -n "${ACR_NAME}" -g "${RG}" 1>/dev/null 2>&1; then
-  az acr create -n "${ACR_NAME}" -g "${RG}" --sku Basic --admin-enabled true 1>/dev/null
+if ! az acr show -n "${ACR_NAME}" -g "${RG}"; then
+  az acr create -n "${ACR_NAME}" -g "${RG}" --sku Basic --admin-enabled true
 else
-  az acr update -n "${ACR_NAME}" -g "${RG}" --admin-enabled true 1>/dev/null
+  az acr update -n "${ACR_NAME}" -g "${RG}" --admin-enabled true
 fi
 ACR_LOGIN_SERVER="$(az acr show -n "${ACR_NAME}" --query loginServer -o tsv)"
 ACR_USERNAME="$(az acr credential show -n "${ACR_NAME}" --query username -o tsv)"
 ACR_PASSWORD="$(az acr credential show -n "${ACR_NAME}" --query 'passwords[0].value' -o tsv)"
 
-az acr build -r "${ACR_NAME}" -t "${APP_NAME}:${IMAGE_TAG}" . 1>/dev/null
+az acr build -r "${ACR_NAME}" -t "${APP_NAME}:${IMAGE_TAG}" .
 
-if ! az containerapp show -n "${APP_NAME}" -g "${RG}" 1>/dev/null 2>&1; then
+if ! az containerapp show -n "${APP_NAME}" -g "${RG}"; then
   az containerapp create -n "${APP_NAME}" -g "${RG}" --environment "${ENV_NAME}" \
     --image "${ACR_LOGIN_SERVER}/${APP_NAME}:${IMAGE_TAG}" \
     --ingress external --target-port 8000 \
@@ -69,12 +69,12 @@ if ! az containerapp show -n "${APP_NAME}" -g "${RG}" 1>/dev/null 2>&1; then
       APP_PASSWORD=secretref:app-password \
       AUTH_REQUIRED=true \
       AZURE_STORAGE_CONNECTION_STRING="secretref:${STORAGE_CONNSTR_SECRET_NAME}" \
-      AZURE_STORAGE_PREFIX="${AZURE_STORAGE_PREFIX}" 1>/dev/null
+      AZURE_STORAGE_PREFIX="${AZURE_STORAGE_PREFIX}"
 else
   az containerapp secret set -n "${APP_NAME}" -g "${RG}" --secrets \
     openai-api-key="${OPENAI_API_KEY}" \
     app-password="${APP_PASSWORD}" \
-    "${STORAGE_CONNSTR_SECRET_NAME}=${AZURE_STORAGE_CONNECTION_STRING}" 1>/dev/null
+    "${STORAGE_CONNSTR_SECRET_NAME}=${AZURE_STORAGE_CONNECTION_STRING}"
 
   az containerapp update -n "${APP_NAME}" -g "${RG}" \
     --image "${ACR_LOGIN_SERVER}/${APP_NAME}:${IMAGE_TAG}" \
@@ -84,9 +84,9 @@ else
       APP_PASSWORD=secretref:app-password \
       AUTH_REQUIRED=true \
       AZURE_STORAGE_CONNECTION_STRING="secretref:${STORAGE_CONNSTR_SECRET_NAME}" \
-      AZURE_STORAGE_PREFIX="${AZURE_STORAGE_PREFIX}" 1>/dev/null
+      AZURE_STORAGE_PREFIX="${AZURE_STORAGE_PREFIX}"
 
-  az containerapp ingress update -n "${APP_NAME}" -g "${RG}" --type external --target-port 8000 1>/dev/null
+  az containerapp ingress update -n "${APP_NAME}" -g "${RG}" --type external --target-port 8000
 fi
 
 echo "Deployed: $(az containerapp show -n "${APP_NAME}" -g "${RG}" --query properties.configuration.ingress.fqdn -o tsv)"

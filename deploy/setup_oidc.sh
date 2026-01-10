@@ -43,12 +43,18 @@ az identity federated-credential create \
   --audience "api://AzureADTokenExchange"
 
 # 5. Assign Permissions (Contributor on the Resource Group)
-# Adjust role as needed (e.g., 'AcrPush' if using ACR, or specific roles)
 echo "Assigning 'Contributor' role to the Resource Group..."
 az role assignment create \
   --assignee "${PRINCIPAL_ID}" \
   --role "Contributor" \
   --scope "/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}"
+
+# 6. Assign Reader Permissions on Subscription (Required for Login validation)
+echo "Assigning 'Reader' role to the Subscription (for login validation)..."
+az role assignment create \
+  --assignee "${PRINCIPAL_ID}" \
+  --role "Reader" \
+  --scope "/subscriptions/${SUBSCRIPTION_ID}"
 
 echo "--------------------------------------------------"
 echo "SETUP COMPLETE"
