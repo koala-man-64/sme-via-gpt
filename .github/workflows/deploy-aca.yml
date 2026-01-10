@@ -24,18 +24,10 @@ jobs:
       ACR_NAME: ${{ vars.AZURE_ACR_NAME }}
       AZURE_STORAGE_PREFIX: ${{ vars.AZURE_STORAGE_PREFIX || '' }}
       IMAGE_TAG: ${{ github.sha }}
-      HAS_AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS != '' }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Azure login (service principal JSON)
-        if: env.HAS_AZURE_CREDENTIALS == 'true'
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
       - name: Azure login (OIDC)
-        if: env.HAS_AZURE_CREDENTIALS != 'true'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
