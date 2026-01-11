@@ -185,7 +185,7 @@ class ConversationManager:
         
         assistant_turn = {"role": "assistant", "content": assistant_msg}
         if stats:
-             assistant_turn["stats"] = stats
+            assistant_turn["stats"] = stats
              
         history.append(assistant_turn)
         
