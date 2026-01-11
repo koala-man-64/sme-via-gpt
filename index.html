@@ -193,8 +193,28 @@
       font-family: inherit;
     }
 
+    #input {
+      flex: 1;
+      padding: 10px;
+      border: 2px solid var(--line);
+      outline: none;
+      font-family: inherit;
+      resize: none;
+      /* No manual resize */
+      height: 50px;
+      min-height: 50px;
+      max-height: 400px;
+      overflow-y: hidden;
+      /* Hide scrollbar when auto-expanding */
+    }
+
     #input:focus {
       border-color: var(--accent);
+    }
+
+    /* Show scrollbar if max-height reached */
+    #input.scrolling {
+      overflow-y: auto;
     }
 
     button {
@@ -274,7 +294,74 @@
       width: 300px;
     }
 
+    /* Tree View Styles */
+    details {
+      margin-bottom: 4px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+    }
+
+    details[open] {
+      border-color: var(--line-soft);
+      background: var(--bg-warm);
+    }
+
+    summary {
+      cursor: pointer;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      user-select: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      outline: none;
+    }
+
+    summary:hover {
+      background: var(--line-soft);
+    }
+
+    summary::-webkit-details-marker {
+      color: var(--muted);
+    }
+
+    .tree-msgs {
+      list-style: none;
+      padding: 0 0 0 16px;
+      margin: 4px 0;
+    }
+
+    .tree-msgs li {
+      font-size: 10px;
+      color: #555;
+      padding: 2px 0;
+      border-left: 1px solid var(--line);
+      padding-left: 6px;
+      margin-bottom: 2px;
+      cursor: pointer;
+    }
+
+    .tree-msgs li:hover {
+      color: var(--text);
+      background: rgba(0, 0, 0, 0.03);
+    }
+
+    .load-chat-btn {
+      font-size: 9px;
+      color: var(--accent);
+      cursor: pointer;
+      margin-left: 16px;
+      margin-bottom: 4px;
+      display: inline-block;
+    }
+
     @media (max-width: 900px) {
+      .mobile-only {
+        display: inline-block !important;
+        margin-right: 12px;
+      }
+
       header {
         flex-wrap: wrap;
         gap: 8px;
@@ -571,7 +658,7 @@
 
           <div
             style="margin-top:12px; margin-bottom:4px; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em;">
-            History</div>
+            Saved Chats</div>
           <div id="historyList"
             style="border:1px solid var(--line-soft); flex:1; overflow-y:auto; min-height:100px; background:#fff;">
           </div>
@@ -582,10 +669,21 @@
     <!-- CENTER PANEL: Chat -->
     <main class="col col-center" id="panel-center">
       <div id="chat-container">
+        <!-- HEADER -->
+        <div class="panel-header"
+          style="flex:0 0 auto; background:var(--panel); border-bottom:2px solid var(--line); padding:var(--spacing-panel); display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center;">
+            <button id="mobileBackBtn" class="mobile-only"
+              style="display:none; padding:4px 8px; font-size:14px; margin-right:8px;"
+              onclick="setMobileTab('model')">←</button>
+            <span class="panel-title">Chat</span>
+          </div>
+          <button id="newChatBtn" onclick="startNewChat()">NEW CHAT</button>
+        </div>
         <div id="chat"></div>
         <div id="input-area">
           <div id="bar">
-            <input id="input" placeholder="Type your question..." autocomplete="off" />
+            <textarea id="input" placeholder="Type your question..." rows="1"></textarea>
             <button id="send">SEND</button>
           </div>
         </div>
@@ -638,6 +736,8 @@
         <div style="padding:4px var(--spacing-panel);">
           <div id="reindexOut" style="font-size:10px; color:var(--accent);"></div>
           <div class="muted" id="docsSummary" style="font-size:10px; margin-top:4px;"></div>
+          <!-- Status Stats -->
+          <div id="status" style="margin-top:8px; display:flex; flex-direction:column; gap:2px;"></div>
         </div>
         <div class="panel-body" id="docsList" style="padding:var(--spacing-panel);"></div>
       </div>
@@ -671,18 +771,6 @@
       bubble.innerHTML = marked.parse(text);
       div.appendChild(bubble);
       chat.appendChild(div);
-
-      // Add to history list
-      const hist = document.getElementById('historyList');
-      if (hist) {
-        const item = document.createElement('div');
-        item.className = 'hist-item';
-        const roleLabel = role === 'user' ? 'User' : 'Bot';
-        item.innerHTML = `<b>${roleLabel}:</b> ${text}`;
-        item.onclick = () => scrollToMsg(msgId);
-        hist.appendChild(item);
-        hist.scrollTop = hist.scrollHeight;
-      }
 
       // Auto-scroll chat
       setTimeout(() => {
@@ -840,45 +928,40 @@
       docs.forEach((doc) => {
         const row = document.createElement('label');
         row.className = 'doc-item';
-        // ... existing rendering code ...
-        // (Re-stating briefly since this chunk is small, but tool usage implies replace)
-        // Wait, I should not cut off the function.
-        // I will append the JS logic at the end of the script instead of interrupting here.
-        // Skipping this chunk edit to avoid context matching issues inside renderDocs.
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = selectedDocs.has(doc.name);
+        checkbox.addEventListener('change', () => {
+          if (checkbox.checked) selectedDocs.add(doc.name);
+          else selectedDocs.delete(doc.name);
+          updateDocsSummary();
+        });
+
+        const info = document.createElement('div');
+        info.className = 'doc-info';
+
+        const name = document.createElement('span');
+        name.className = 'doc-name';
+        name.textContent = doc.name;
+
+        const meta = document.createElement('span');
+        meta.className = 'doc-meta';
+        const parts = [];
+        if (doc.cache_status) parts.push(doc.cache_status);
+        if (doc.size) parts.push(formatBytes(doc.size));
+        meta.textContent = parts.join(' | ');
+
+        info.appendChild(name);
+        info.appendChild(meta);
+
+        row.appendChild(checkbox);
+        row.appendChild(info);
+        list.appendChild(row);
       });
-
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = selectedDocs.has(doc.name);
-      checkbox.addEventListener('change', () => {
-        if (checkbox.checked) selectedDocs.add(doc.name);
-        else selectedDocs.delete(doc.name);
-        updateDocsSummary();
-      });
-
-      const info = document.createElement('div');
-      info.className = 'doc-info';
-
-      const name = document.createElement('span');
-      name.className = 'doc-name';
-      name.textContent = doc.name;
-
-      const meta = document.createElement('span');
-      meta.className = 'doc-meta';
-      const parts = [];
-      if (doc.cache_status) parts.push(doc.cache_status);
-      if (doc.size) parts.push(formatBytes(doc.size));
-      meta.textContent = parts.join(' | ');
-
-      info.appendChild(name);
-      info.appendChild(meta);
-
-      row.appendChild(checkbox);
-      row.appendChild(info);
-      list.appendChild(row);
-    });
-    updateDocsSummary();
+      updateDocsSummary();
     }
+
 
     async function loadDocs() {
       console.log("loadDocs: called");
@@ -1023,6 +1106,146 @@
       if (existing) existing.remove();
     }
 
+    // TREE VIEW LOGIC
+
+    async function loadConversationList() {
+      try {
+        const r = await fetchWithAuth('/api/conversations');
+        if (!r.ok) return; // Silent fail
+        const data = await r.json();
+        const list = document.getElementById('historyList');
+        if (!list) return;
+        list.innerHTML = '';
+
+        if (!data.sessions || data.sessions.length === 0) {
+          list.innerHTML = '<div style="padding:8px; color:var(--muted); font-size:11px;">No saved chats.</div>';
+          return;
+        }
+
+        data.sessions.forEach(s => {
+          const det = document.createElement('details');
+          det.id = 'tree-' + s.id;
+
+          const sum = document.createElement('summary');
+          // Format date slightly
+          const d = s.last_modified ? new Date(s.last_modified).toLocaleString() : s.id.substring(0, 8);
+          sum.textContent = d;
+          sum.title = s.id;
+
+          // Lazy load on toggle
+          det.addEventListener('toggle', (e) => {
+            if (det.open) onExpandChat(s.id, det);
+          });
+
+          det.appendChild(sum);
+          list.appendChild(det);
+        });
+
+      } catch (e) {
+        console.error("loadConversationList fail", e);
+      }
+    }
+
+    async function onExpandChat(id, detailsEl) {
+      if (detailsEl.dataset.loaded) return; // Already loaded
+
+      const contentDiv = document.createElement('div');
+      contentDiv.innerHTML = '<div style="padding:4px 16px; font-size:10px; color:var(--muted);">Loading...</div>';
+      detailsEl.appendChild(contentDiv);
+
+      try {
+        const r = await fetchWithAuth('/api/history/' + id);
+        if (!r.ok) throw new Error("Fetch fail");
+        const data = await r.json();
+
+        contentDiv.innerHTML = ''; // Clear loading
+
+        // Load Button
+        const btn = document.createElement('span');
+        btn.className = 'load-chat-btn';
+        btn.textContent = 'OPEN THIS CHAT';
+        btn.onclick = () => {
+          conversationId = id;
+          localStorage.setItem("conversationId", id);
+          loadHistory(id);
+          if (window.innerWidth <= 900) setMobileTab('chat');
+        };
+        contentDiv.appendChild(btn);
+
+        // Messages List
+        const ul = document.createElement('ul');
+        ul.className = 'tree-msgs';
+
+        (data.history || []).forEach(msg => {
+          const li = document.createElement('li');
+          // Truncate
+          const txt = msg.content.substring(0, 50) + (msg.content.length > 50 ? '...' : '');
+          li.textContent = `${msg.role === 'user' ? 'U' : 'A'}: ${txt}`;
+          li.title = msg.content;
+          // Clicking a message could scroll to it if loaded, but for now just load the chat
+          li.onclick = () => {
+            conversationId = id;
+            localStorage.setItem("conversationId", id);
+            loadHistory(id);
+            if (window.innerWidth <= 900) setMobileTab('chat');
+          };
+          ul.appendChild(li);
+        });
+
+        contentDiv.appendChild(ul);
+        detailsEl.dataset.loaded = "true";
+
+      } catch (e) {
+        contentDiv.innerHTML = '<div style="padding:4px 16px; color:red; font-size:10px;">Error loading</div>';
+      }
+    }
+
+    async function loadHistory(id) {
+      try {
+        console.log("Loading history for:", id);
+        const r = await fetchWithAuth('/api/history/' + id);
+        if (!r.ok) throw new Error("Failed to load history");
+        const data = await r.json();
+
+        // Clear existing
+        document.getElementById('chat').innerHTML = '';
+        msgCount = 0;
+
+        // Render messages
+        if (data.history && Array.isArray(data.history)) {
+          data.history.forEach(msg => {
+            addMsg(msg.role, msg.content);
+          });
+        }
+
+        // Restore selected docs
+        if (data.selected_blobs && Array.isArray(data.selected_blobs)) {
+          selectedDocs = new Set(data.selected_blobs);
+          renderDocs();
+        }
+
+        console.log("History loaded. Msg count:", msgCount);
+      } catch (e) {
+        console.error("loadHistory failed", e);
+        // If invalid, clear ID
+        localStorage.removeItem("conversationId");
+        conversationId = null;
+      }
+    }
+
+    function startNewChat() {
+      conversationId = null;
+      localStorage.removeItem("conversationId");
+      document.getElementById('chat').innerHTML = '';
+      const hist = document.getElementById('historyList');
+      if (hist) hist.innerHTML = '';
+      msgCount = 0;
+      setUsageInfo(null);
+      selectedDocs.clear(); // Optional: do we want to clear selection? Proposed plan said reset.
+      renderDocs();
+      addMsg('assistant', 'Started a new chat session.');
+    }
+
     async function send() {
       const inp = document.getElementById('input');
       const text = inp.value.trim();
@@ -1045,7 +1268,11 @@
         });
         const j = await r.json();
         conversationId = j.conversation_id;
+        localStorage.setItem("conversationId", conversationId);
         removeThinking();
+
+        // Refresh list to show new updated time/chat
+        // loadConversationList();
 
         // Answer
         addMsg('assistant', j.answer);
@@ -1079,9 +1306,40 @@
       }
     }
 
-    document.getElementById('send').addEventListener('click', send);
-    document.getElementById('input').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') send();
+    const inpEl = document.getElementById('input');
+
+    function autoResizeInput() {
+      inpEl.style.height = 'auto';
+      inpEl.style.height = inpEl.scrollHeight + 'px';
+      if (inpEl.scrollHeight > 400) {
+        inpEl.classList.add('scrolling');
+      } else {
+        inpEl.classList.remove('scrolling');
+      }
+    }
+
+    inpEl.addEventListener('input', autoResizeInput);
+
+    // Reset height on send
+    const originalSend = send;
+    // We need to hook into send or just rely on value clearing.
+    // The send function clears inp.value, we should resize after.
+
+    document.getElementById('send').addEventListener('click', () => {
+      send().then(() => {
+        inpEl.style.height = '50px';
+        inpEl.classList.remove('scrolling');
+      });
+    });
+
+    inpEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send().then(() => {
+          inpEl.style.height = '50px';
+          inpEl.classList.remove('scrolling');
+        });
+      }
     });
 
     document.getElementById('authBtn').addEventListener('click', attemptAuth);
@@ -1182,6 +1440,70 @@
       setMobileTab('chat');
     }
 
+    // ----------------------------------------------------
+    // Debug Logging Overlay
+    // ----------------------------------------------------
+    (function () {
+      const debugDiv = document.createElement('div');
+      debugDiv.id = 'debug-console';
+      debugDiv.style.cssText = `
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        width: 100%;
+        height: 150px;
+        background: rgba(0,0,0,0.85);
+        color: #0f0;
+        font-family: monospace;
+        font-size: 10px;
+        padding: 8px;
+        overflow-y: auto;
+        z-index: 9999;
+        display: none; /* Hidden by default, toggle with double click on header */
+        border-top: 1px solid #333;
+      `;
+      document.body.appendChild(debugDiv);
+
+      const oldLog = console.log;
+      const oldErr = console.error;
+
+      function appendLog(type, args) {
+        const line = document.createElement('div');
+        line.style.color = type === 'ERR' ? '#ff6b6b' : '#0f0';
+        line.style.borderBottom = '1px solid #333';
+        line.textContent = `[${type}] ` + Array.from(args).map(a =>
+          typeof a === 'object' ? JSON.stringify(a) : String(a)
+        ).join(' ');
+        debugDiv.appendChild(line);
+        debugDiv.scrollTop = debugDiv.scrollHeight;
+      }
+
+      console.log = function (...args) {
+        oldLog.apply(console, args);
+        appendLog('LOG', args);
+      };
+
+      console.error = function (...args) {
+        oldErr.apply(console, args);
+        appendLog('ERR', args);
+      };
+
+      window.onerror = function (msg, url, line, col, error) {
+        appendLog('FATAL', [msg, url, line, col, error]);
+        // Force show if fatal error
+        debugDiv.style.display = 'block';
+      };
+
+      // Toggle on Header Click
+      document.querySelector('header').addEventListener('dblclick', () => {
+        debugDiv.style.display = debugDiv.style.display === 'none' ? 'block' : 'none';
+      });
+
+      // Also show initially for now to help the user immediately
+      // debugDiv.style.display = 'block'; 
+      console.log("Debug Console Initialized (Hidden)");
+    })();
+
     if (AUTH_REQUIRED) {
       showAuthMask('');
     } else {
@@ -1192,6 +1514,17 @@
           refreshStatus().catch(e => console.error("Startup: refreshStatus fail", e));
           loadDocs().catch(e => console.error("Startup: loadDocs fail", e));
           loadModels().catch(e => console.error("Startup: loadModels fail", e));
+
+          // RESTORE CHAT
+          const storedId = localStorage.getItem("conversationId");
+          if (storedId) {
+            conversationId = storedId;
+            loadHistory(storedId).catch(e => console.error("Startup: loadHistory fail", e));
+          }
+
+          // Load Tree
+          loadConversationList();
+
         } catch (e) { console.error("Startup IIFE fatal", e); }
       })();
     }

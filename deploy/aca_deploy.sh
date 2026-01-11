@@ -27,7 +27,7 @@ set -euo pipefail
 LAW_NAME="${APP_NAME}-law"
 STORAGE_CONNSTR_SECRET_NAME="storage-connstr" # Container Apps secret name max length is 20
 
-az group create -n "${RG}" -l "${LOCATION}"
+# az group create -n "${RG}" -l "${LOCATION}"
 
 if ! az monitor log-analytics workspace show -g "${RG}" -n "${LAW_NAME}"; then
   az monitor log-analytics workspace create -g "${RG}" -n "${LAW_NAME}" -l "${LOCATION}"

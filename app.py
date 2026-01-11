@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
+from azure.core.exceptions import ResourceNotFoundError
 
 from openai import OpenAI
 
@@ -122,34 +123,99 @@ MODELS = [
 # -----------------------------
 # Conversation Memory (In-Memory)
 # -----------------------------
+# -----------------------------
+# Conversation Memory (ADLS-backed)
+# -----------------------------
 class ConversationManager:
     def __init__(self, max_turns: int = 12):
-        self._chats: Dict[str, List[Dict[str, str]]] = {}
         self.max_turns = max_turns
 
-    def get_history(self, conversation_id: str) -> List[Dict[str, str]]:
-        return self._chats.get(conversation_id, [])
+    def _get_blob_client(self, conversation_id: str):
+        blob_name = f"chats/{conversation_id}.json"
+        # Since azure_blob_service_client is global helper
+        bsc = azure_blob_service_client() 
+        return bsc.get_blob_client(container=AZURE_STORAGE_CONTAINER, blob=blob_name)
 
-    def add_turn(self, conversation_id: str, user_msg: str, assistant_msg: str, stats: Optional[Dict[str, float]] = None):
-        if conversation_id not in self._chats:
-            self._chats[conversation_id] = []
+    def load_session(self, conversation_id: str) -> Tuple[List[Dict[str, str]], List[str]]:
+        """Returns (history_messages, selected_blobs)"""
+        if not conversation_id:
+            return [], []
         
-        history = self._chats[conversation_id]
+        try:
+            client = self._get_blob_client(conversation_id)
+            if not client.exists():
+                return [], []
+            
+            data = json.loads(client.download_blob().readall())
+            history = data.get("history", [])
+            selected = data.get("selected_blobs", [])
+            return history, selected
+        except ResourceNotFoundError:
+            return [], []
+        except Exception as e:
+            logger.error(f"Error loading session {conversation_id}: {e}")
+            return [], []
+
+    def get_history(self, conversation_id: str) -> List[Dict[str, str]]:
+        hist, _ = self.load_session(conversation_id)
+        return hist
+
+    def save_turn(self, conversation_id: str, history: List[Dict[str, Any]], selected_blobs: List[str]):
+        try:
+            client = self._get_blob_client(conversation_id)
+            payload = {
+                "history": history,
+                "selected_blobs": list(selected_blobs),
+                "last_updated": now_iso()
+            }
+            client.upload_blob(json.dumps(payload, ensure_ascii=False), overwrite=True)
+        except Exception as e:
+            logger.error(f"Error saving session {conversation_id}: {e}")
+
+    def add_turn(self, conversation_id: str, user_msg: str, assistant_msg: str, selected_blobs: List[str], stats: Optional[Dict[str, float]] = None):
+        history, _ = self.load_session(conversation_id)
+        
         history.append({"role": "user", "content": user_msg})
         
-        # Store stats in assistant message metadata if needed, 
-        # or just as a separate field in the turn object ideally.
-        # For simplicity, we tack it onto the assistant message object
         assistant_turn = {"role": "assistant", "content": assistant_msg}
         if stats:
              assistant_turn["stats"] = stats
              
         history.append(assistant_turn)
         
-        # Simple turn-based expiration for now
         if len(history) > self.max_turns * 2:
             history = history[-(self.max_turns * 2):]
-            self._chats[conversation_id] = history
+            
+        self.save_turn(conversation_id, history, selected_blobs)
+
+    def list_sessions(self) -> List[Dict[str, str]]:
+        try:
+            # azure_blob_service_client is global
+            bsc = azure_blob_service_client()
+            container = bsc.get_container_client(AZURE_STORAGE_CONTAINER)
+            blobs = container.list_blobs(name_starts_with="chats/")
+            
+            sessions = []
+            for b in blobs:
+                # Name format: chats/{uuid}.json
+                name = b.name
+                if not name.endswith(".json"):
+                    continue
+                
+                cid = name.replace("chats/", "").replace(".json", "")
+                # We can return creation_time or last_modified as "date"
+                sessions.append({
+                    "id": cid,
+                    "last_modified": b.last_modified.isoformat() if b.last_modified else "",
+                    "name": cid # Could be enhanced to store a title
+                })
+            
+            # Sort by last_modified desc
+            sessions.sort(key=lambda x: x["last_modified"], reverse=True)
+            return sessions
+        except Exception as e:
+            logger.error(f"Error listing sessions: {e}")
+            return []
 
 conversation_manager = ConversationManager(MAX_TURNS)
 
@@ -1030,7 +1096,19 @@ def get_models(request: Request):
     return ModelsResponse(models=MODELS, default=OPENAI_MODEL)
 
 
+@app.get("/api/conversations")
+async def list_conversations_endpoint(request: Request):
+    """Lists available chat sessions."""
+    enforce_auth(request)
+    sessions = conversation_manager.list_sessions()
+    return {"sessions": sessions}
 
+@app.get("/api/history/{conversation_id}")
+async def get_history_endpoint(conversation_id: str, request: Request):
+    """Retrieves chat history and context for a given conversation ID."""
+    enforce_auth(request)
+    history, selected = conversation_manager.load_session(conversation_id)
+    return {"history": history, "selected_blobs": selected}
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -1166,7 +1244,20 @@ def chat(request: Request, req: ChatRequest):
         cached_chunks_est = cached_tokens / avg_chunk_size
         
     # 5. Update History with stats
-    conversation_manager.add_turn(conv_id, msg, answer, stats={"cached_chunks": cached_chunks_est})
+    # Pass current actual selected set (or what was used)
+    # The 'rag.search' uses self.meta which is filtered by 'build_or_update_from_adls'.
+    # In 'api/chat', 'rag' is global.
+    # The user selection state is typically Global in this single-user app design, stored in 'state.json'.
+    # So we can fetch it from there or from the 'rag' index if we store it.
+    
+    # Best effort: retrieve from state.json
+    try:
+        current_state = load_state()
+        current_selection = current_state.get("selected_blobs", [])
+    except:
+        current_selection = []
+
+    conversation_manager.add_turn(conv_id, msg, answer, selected_blobs=current_selection, stats={"cached_chunks": cached_chunks_est})
     
     # Calculate Aggregate Average from History
     # Iterate history, sum up 'stats.cached_chunks' for assistant messages
