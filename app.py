@@ -140,6 +140,12 @@ class ConversationManager:
         """Returns (history_messages, selected_blobs)"""
         if not conversation_id:
             return [], []
+
+        # SEC-05: Path Traversal prevention
+        # Validate that conversation_id is a simple UUID-like alphanumeric string
+        if not re.match(r'^[a-zA-Z0-9-]+$', conversation_id):
+            logger.warning(f"Invalid conversation_id attempted: {conversation_id}")
+            return [], []
         
         try:
             client = self._get_blob_client(conversation_id)
@@ -317,8 +323,13 @@ def enforce_auth(request: Request) -> None:
         return
     if is_local(request):
         return
-    password = request.headers.get("x-app-password", "")
-    if not password or password != APP_PASSWORD:
+    
+    password_hash = request.headers.get("x-app-password", "")
+    # Calculate expected hash of the stored password
+    expected_hash = sha256_bytes(APP_PASSWORD.encode("utf-8")) if APP_PASSWORD else ""
+    
+    # Compare hashes
+    if not password_hash or password_hash != expected_hash:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
@@ -1109,6 +1120,21 @@ async def get_history_endpoint(conversation_id: str, request: Request):
     enforce_auth(request)
     history, selected = conversation_manager.load_session(conversation_id)
     return {"history": history, "selected_blobs": selected}
+
+
+class AuthRequest(BaseModel):
+    password: str
+
+@app.post("/api/auth")
+async def auth_check(req: AuthRequest, request: Request):
+    """Verify password hash. Frontend sends SHA-256 hash of user input."""
+    # We expect the payload 'password' to ALREADY be a hash from the client.
+    # We compare it to the hash of our server-side APP_PASSWORD.
+    expected_hash = sha256_bytes(APP_PASSWORD.encode("utf-8")) if APP_PASSWORD else ""
+    
+    if req.password == expected_hash:
+        return {"status": "ok"}
+    raise HTTPException(status_code=401, detail="Incorrect password")
 
 
 @app.post("/api/chat", response_model=ChatResponse)

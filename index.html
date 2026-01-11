@@ -4,6 +4,11 @@
 <head>
   <meta charset="utf-8" />
   <title>Local RAG Chatbot</title>
+  <!-- SEC-02: Content Security Policy -->
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;">
+  <!-- SEC-01: DOMPurify for XSS mitigation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
   <style>
     :root {
       --bg: #f7f5ef;
@@ -768,7 +773,8 @@
 
       const bubble = document.createElement('div');
       bubble.className = 'bubble';
-      bubble.innerHTML = marked.parse(text);
+      // SEC-01: Sanitize Markdown output
+      bubble.innerHTML = DOMPurify.sanitize(marked.parse(text));
       div.appendChild(bubble);
       chat.appendChild(div);
 
@@ -856,6 +862,13 @@
       return r;
     }
 
+    async function digestMessage(message) {
+      const msgUint8 = new TextEncoder().encode(message);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
     async function attemptAuth() {
       const input = document.getElementById('authInput');
       const btn = document.getElementById('authBtn');
@@ -866,16 +879,17 @@
       }
       if (btn) btn.disabled = true;
       try {
+        const hash = await digestMessage(password);
         const r = await fetch('/api/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password })
+          body: JSON.stringify({ password: hash })
         });
         if (!r.ok) {
           showAuthMask('Incorrect password.');
           return;
         }
-        appPassword = password;
+        appPassword = hash;
         if (input) input.value = '';
         hideAuthMask();
         await refreshStatus();
@@ -1443,6 +1457,11 @@
     // ----------------------------------------------------
     // Debug Logging Overlay
     // ----------------------------------------------------
+    // ----------------------------------------------------
+    // Debug Logging Overlay
+    // ----------------------------------------------------
+    // SEC-03: Disabled for production security
+    /*
     (function () {
       const debugDiv = document.createElement('div');
       debugDiv.id = 'debug-console';
@@ -1460,8 +1479,8 @@
         overflow-y: auto;
         z-index: 9999;
         display: none; /* Hidden by default, toggle with double click on header */
-        border-top: 1px solid #333;
-      `;
+    border - top: 1px solid #333;
+    `;
       document.body.appendChild(debugDiv);
 
       const oldLog = console.log;
@@ -1471,7 +1490,7 @@
         const line = document.createElement('div');
         line.style.color = type === 'ERR' ? '#ff6b6b' : '#0f0';
         line.style.borderBottom = '1px solid #333';
-        line.textContent = `[${type}] ` + Array.from(args).map(a =>
+        line.textContent = `[${ type }] ` + Array.from(args).map(a =>
           typeof a === 'object' ? JSON.stringify(a) : String(a)
         ).join(' ');
         debugDiv.appendChild(line);
@@ -1502,7 +1521,9 @@
       // Also show initially for now to help the user immediately
       // debugDiv.style.display = 'block'; 
       console.log("Debug Console Initialized (Hidden)");
+      document.body.appendChild(debugDiv);
     })();
+    */
 
     if (AUTH_REQUIRED) {
       showAuthMask('');
