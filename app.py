@@ -921,6 +921,18 @@ app = FastAPI(title="Local RAG Chatbot (OpenAI + ADLS)")
 rag = RagIndex()
 
 
+@app.get("/healthz")
+def healthz():
+    """Liveness probe"""
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readyz():
+    """Readiness probe"""
+    return {"status": "ready"}
+
+
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None

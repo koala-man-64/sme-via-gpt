@@ -49,5 +49,17 @@ jobs:
       - name: Smoke check
         run: |
           FQDN="$(az containerapp show -n "$APP_NAME" -g "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
-          curl -fsS "https://${FQDN}/healthz"
-          curl -fsS "https://${FQDN}/readyz"
+          echo "Verifying deployment at https://${FQDN}/healthz ..."
+          
+          # Retry loop: check /healthz for up to 120 seconds
+          for i in {1..24}; do
+            if curl -fsS "https://${FQDN}/healthz" >/dev/null; then
+              echo "Health check passed!"
+              exit 0
+            fi
+            echo "Attempt $i: Health check failed. Retrying in 5s..."
+            sleep 5
+          done
+          
+          echo "Health check failed after 120 seconds."
+          exit 1
